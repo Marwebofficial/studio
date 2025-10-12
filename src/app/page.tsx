@@ -7,7 +7,7 @@ import * as z from 'zod';
 import { Bot, User, Send, ExternalLink, MessageSquarePlus } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 
-import { streamAnswer } from '@/app/actions';
+import { getAnswer } from '@/app/actions';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -173,60 +173,13 @@ export default function Home() {
         { id: crypto.randomUUID(), role: 'user', content: question },
       ]);
       const assistantMessageId = crypto.randomUUID();
-      // Add a placeholder for the assistant's response
-      setMessages((prev) => [
-        ...prev,
-        { id: assistantMessageId, role: 'assistant', content: '▍' },
-      ]);
       
       try {
-        const stream = await streamAnswer(question);
-        if (!stream) {
-          throw new Error('Failed to get a response from the server.');
-        }
-
-        const reader = stream.getReader();
-        const decoder = new TextDecoder();
-        let fullResponse = '';
-
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) {
-            break;
-          }
-          fullResponse += decoder.decode(value, { stream: true });
-
-          setMessages((prev) =>
-            prev.map((msg) =>
-              msg.id === assistantMessageId
-                ? { ...msg, content: fullResponse + '▍' }
-                : msg
-            )
-          );
-        }
-        
-        let finalContent = fullResponse;
-        let sources: string[] = [];
-
-        if (fullResponse.includes(__SOURCES_DELIMITER__)) {
-          const parts = fullResponse.split(__SOURCES_DELIMITER__);
-          finalContent = parts[0];
-          try {
-            sources = JSON.parse(parts[1]);
-          } catch (e) {
-            console.error('Failed to parse sources', e);
-          }
-        }
-        
-        // Final update without the cursor
-        setMessages((prev) =>
-          prev.map((msg) =>
-            msg.id === assistantMessageId
-              ? { ...msg, content: finalContent, sources: sources }
-              : msg
-          )
-        );
-
+        const answer = await getAnswer(question);
+        setMessages((prev) => [
+          ...prev,
+          { id: assistantMessageId, role: 'assistant', content: answer },
+        ]);
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred.';
         setMessages((prev) => [
@@ -314,8 +267,6 @@ export default function Home() {
                                 }
 
                                 if (message.role === 'assistant') {
-                                    // Don't render the placeholder message if we are pending.
-                                    if(isPending && message.content === '▍') return null;
                                     return <AssistantMessage
                                                 key={message.id}
                                                 content={message.content}
