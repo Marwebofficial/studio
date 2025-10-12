@@ -39,5 +39,5 @@ export async function streamAnswer(
   question: string
 ): Promise<ReadableStream<string>> {
   const validatedQuestion = QuestionSchema.parse(question);
-  return await streamAnswerFromWebSearch({ question: validatedQuestion });
+  return streamAnswerFromWebSearch({ question: validatedQuestion });
 }
