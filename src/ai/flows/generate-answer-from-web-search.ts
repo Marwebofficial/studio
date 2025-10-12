@@ -91,49 +91,17 @@ export async function streamAnswerFromWebSearch(
 - When you use search, you must include the links to the sources in your answer.`,
   });
 
-  const reader = stream.getReader();
-  return new ReadableStream({
-    async pull(controller) {
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) {
-          controller.close();
-          break;
-        }
-        if (value.text) {
-          controller.enqueue(value.text);
-        }
-        if (value.toolRequest) {
-          const toolResponse = await webSearchTool(value.toolRequest.input);
-          const { stream: stream2 } = await ai.generate({
-            model: 'googleai/gemini-2.5-flash',
-            prompt: `Question: ${input.question}`,
-            history: [
-              { role: 'user', content: [{text: `Question: ${input.question}`}]},
-              { role: 'model', content: [{toolRequest: value.toolRequest}] },
-              { role: 'tool',
-                content: [{
-                  toolResponse: {
-                    name: value.toolRequest.name,
-                    response: toolResponse,
-                  }
-                }]
-              }
-            ],
-          });
-          const reader2 = stream2.getReader();
-          while (true) {
-            const { done, value } = await reader2.read();
-            if (done) {
-              controller.close();
-              break;
-            }
-            if (value.text) {
-              controller.enqueue(value.text);
-            }
-          }
+  const encoder = new TextEncoder();
+  const readableStream = new ReadableStream({
+    async start(controller) {
+      for await (const chunk of stream) {
+        if (chunk.text) {
+          controller.enqueue(encoder.encode(chunk.text));
         }
       }
+      controller.close();
     },
   });
+
+  return readableStream;
 }
