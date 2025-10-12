@@ -75,11 +75,10 @@ const generateAnswerFromWebSearchFlow = ai.defineFlow(
   }
 );
 
-
 export async function streamAnswerFromWebSearch(
   input: GenerateAnswerFromWebSearchInput
 ): Promise<ReadableStream<string>> {
-  const { stream, response } = ai.generate({
+  const { stream } = ai.generate({
     model: 'googleai/gemini-2.5-flash',
     prompt: `Question: ${input.question}`,
     tools: [webSearchTool],

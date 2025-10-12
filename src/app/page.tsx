@@ -4,7 +4,7 @@ import { useState, useTransition, useRef, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
-import { Bot, User, Send, ExternalLink, MessageSquarePlus, CornerDownLeft } from 'lucide-react';
+import { Bot, User, Send, ExternalLink, MessageSquarePlus } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 
 import { streamAnswer } from '@/app/actions';
@@ -16,8 +16,7 @@ import {
   Card,
   CardContent,
   CardHeader,
-  CardTitle,
-  CardDescription
+  CardTitle
 } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
 import {
@@ -29,16 +28,12 @@ import {
 } from '@/components/ui/form';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useToast } from '@/hooks/use-toast';
-import { cn } from '@/lib/utils';
 import {
-  Sidebar,
-  SidebarContent,
-  SidebarHeader,
-  SidebarMenu,
-  SidebarMenuItem,
-  SidebarMenuButton,
   SidebarProvider,
-  SidebarTrigger
+  Sidebar,
+  SidebarHeader,
+  SidebarContent,
+  SidebarTrigger,
 } from '@/components/ui/sidebar';
 
 type Message = {
@@ -164,29 +159,26 @@ export default function Home() {
 
   const onSubmit = (data: z.infer<typeof formSchema>) => {
     const question = data.question;
+    form.reset();
+    
     setMessages((prev) => [
       ...prev,
       { id: crypto.randomUUID(), role: 'user', content: question },
     ]);
-    form.reset();
 
     startTransition(async () => {
+      const assistantMessageId = crypto.randomUUID();
+      // Add a placeholder for the assistant's response
+      setMessages((prev) => [
+        ...prev,
+        { id: assistantMessageId, role: 'assistant', content: '▍' },
+      ]);
+      
       try {
         const stream = await streamAnswer(question);
         const reader = stream.getReader();
         const decoder = new TextDecoder();
         let fullResponse = '';
-        const assistantMessageId = crypto.randomUUID();
-
-        setMessages((prev) => [
-          ...prev,
-          {
-            id: assistantMessageId,
-            role: 'assistant',
-            content: '▍',
-            sources: [],
-          },
-        ]);
 
         while (true) {
           const { done, value } = await reader.read();
@@ -215,15 +207,18 @@ export default function Home() {
 
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred.';
+        setMessages((prev) =>
+            prev.map((msg) =>
+              msg.id === assistantMessageId
+                ? { id: crypto.randomUUID(), role: 'error', content: errorMessage }
+                : msg
+            )
+        );
         toast({
           variant: 'destructive',
           title: 'Error',
           description: errorMessage,
         });
-        setMessages((prev) => [
-            ...prev,
-            { id: crypto.randomUUID(), role: 'error', content: errorMessage },
-        ]);
       }
     });
   };
@@ -235,7 +230,7 @@ export default function Home() {
         behavior: 'smooth',
       });
     }
-  }, [messages, isPending]);
+  }, [messages]);
 
   return (
     <SidebarProvider>
@@ -310,7 +305,7 @@ export default function Home() {
                                 }
                                 return null;
                             })}
-                            {isPending && messages[messages.length -1]?.role !== 'assistant' && <LoadingMessage />}
+                            {isPending && messages[messages.length -1]?.role === 'user' && <LoadingMessage />}
                         </div>
                         )}
                         </div>
