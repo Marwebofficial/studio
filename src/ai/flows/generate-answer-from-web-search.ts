@@ -58,7 +58,7 @@ const answerPrompt = ai.definePrompt({
 
 Question: {{{question}}}
 
-If the question requires information from the web, use the searchTheWeb tool to find relevant web pages.  Include the links to the sources in the answer.  If the search results don't contain the answer, respond that you were unable to find the answer.
+Use the searchTheWeb tool to find relevant web pages.  Your answer must be based on the content of the web pages you find. Include the links to the sources in the answer.  If the search results don't contain the answer, respond that you were unable to find the answer.
 `,
 });
 
