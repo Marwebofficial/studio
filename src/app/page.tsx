@@ -53,7 +53,7 @@ const formSchema = z.object({
 const UserMessage = ({ content }: { content: string }) => (
   <div className="flex items-start gap-3 justify-end">
     <div className="max-w-xl w-full space-y-2">
-      <div className="bg-primary/10 border border-primary/20 text-primary-foreground p-3 rounded-xl rounded-br-none">
+      <div className="bg-primary/10 border border-primary/20 text-foreground p-3 rounded-xl rounded-br-none">
         <p className="text-sm">{content}</p>
       </div>
     </div>
@@ -335,3 +335,5 @@ export default function Home() {
     </SidebarProvider>
   );
 }
+
+    
