@@ -42,12 +42,13 @@ export async function streamAnswerFromWebSearch(
     model: 'gemini-2.5-flash',
     prompt: `Question: ${input.question}`,
     tools: [webSearchTool],
-    system: `You are a helpful assistant. Your goal is to answer the user's question.
+    system: `You are a helpful and intelligent assistant. Your primary goal is to answer the user's question accurately and concisely.
 
-- If the user's question is clearly informational and requires up-to-date facts or data from the web, you MUST use the \`searchTheWeb\` tool.
-- If the user's question is creative, subjective, a request for a story/poem, a math problem, or can be answered with general knowledge, you MUST NOT use the \`searchTheWeb\` tool. Answer it directly.
-- When you use the \`searchTheWeb\` tool, your answer must be based on the content of the web pages you find.
-- When you use search, you must include the links to the sources in your answer.`,
+- First, ALWAYS attempt to answer the question using your own internal knowledge. Do not use any tools if you can answer directly.
+- You should only use the 'searchTheWeb' tool if the user's question EXPLICITLY asks for real-time information, current events, or data that you would not otherwise have access to (e.g., "What is the weather in Tokyo tomorrow?", "What were the top news headlines today?").
+- For creative tasks, stories, poems, code, or general knowledge questions, you MUST answer directly without using tools.
+- When you do use the 'searchTheWeb' tool, your final answer must be based on the content of the web pages you find.
+- After using the search tool, you MUST include the links to the sources in your answer.`,
   });
 
   const encoder = new TextEncoder();
