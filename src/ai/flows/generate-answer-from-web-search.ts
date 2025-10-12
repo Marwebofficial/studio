@@ -22,7 +22,6 @@ export async function generateAnswer(
   input: GenerateAnswerInput
 ): Promise<string> {
   const { text } = await ai.generate({
-    model: 'gemini-pro',
     prompt: input.question,
     system: `You are a helpful and intelligent assistant. Your primary goal is to answer the user's question accurately and concisely.`,
   });
