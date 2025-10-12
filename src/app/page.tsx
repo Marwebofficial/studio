@@ -36,6 +36,8 @@ import {
   SidebarTrigger,
 } from '@/components/ui/sidebar';
 
+export const __SOURCES_DELIMITER__ = '__SOURCES_DELIMITER__';
+
 type Message = {
   id: string;
   role: 'user' | 'assistant' | 'error';
@@ -125,7 +127,7 @@ const LoadingMessage = () => (
       </AvatarFallback>
     </Avatar>
     <div className="flex-1 space-y-2 pt-1.5">
-      <Skeleton className="h-4 w-1/4" />
+      <p className="font-semibold">Web Chat Navigator</p>
       <Skeleton className="h-4 w-3/4" />
       <Skeleton className="h-4 w-1/2" />
     </div>
@@ -161,12 +163,11 @@ export default function Home() {
     const question = data.question;
     form.reset();
     
-    setMessages((prev) => [
-      ...prev,
-      { id: crypto.randomUUID(), role: 'user', content: question },
-    ]);
-
     startTransition(async () => {
+      setMessages((prev) => [
+        ...prev,
+        { id: crypto.randomUUID(), role: 'user', content: question },
+      ]);
       const assistantMessageId = crypto.randomUUID();
       // Add a placeholder for the assistant's response
       setMessages((prev) => [
@@ -176,6 +177,10 @@ export default function Home() {
       
       try {
         const stream = await streamAnswer(question);
+        if (!stream) {
+          throw new Error('Failed to get a response from the server.');
+        }
+
         const reader = stream.getReader();
         const decoder = new TextDecoder();
         let fullResponse = '';
@@ -196,24 +201,34 @@ export default function Home() {
           );
         }
         
+        let finalContent = fullResponse;
+        let sources: string[] = [];
+
+        if (fullResponse.includes(__SOURCES_DELIMITER__)) {
+          const parts = fullResponse.split(__SOURCES_DELIMITER__);
+          finalContent = parts[0];
+          try {
+            sources = JSON.parse(parts[1]);
+          } catch (e) {
+            console.error('Failed to parse sources', e);
+          }
+        }
+        
         // Final update without the cursor
         setMessages((prev) =>
           prev.map((msg) =>
             msg.id === assistantMessageId
-              ? { ...msg, content: fullResponse }
+              ? { ...msg, content: finalContent, sources: sources }
               : msg
           )
         );
 
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred.';
-        setMessages((prev) =>
-            prev.map((msg) =>
-              msg.id === assistantMessageId
-                ? { id: crypto.randomUUID(), role: 'error', content: errorMessage }
-                : msg
-            )
-        );
+        setMessages((prev) => [
+          ...prev.filter(m => m.id !== assistantMessageId),
+          { id: crypto.randomUUID(), role: 'error', content: errorMessage }
+        ]);
         toast({
           variant: 'destructive',
           title: 'Error',
@@ -293,7 +308,10 @@ export default function Home() {
                                 if (message.role === 'user') {
                                     return <UserMessage key={message.id} content={message.content} />;
                                 }
+
                                 if (message.role === 'assistant') {
+                                    // Don't render the placeholder message if we are pending.
+                                    if(isPending && message.content === '▍') return null;
                                     return <AssistantMessage
                                                 key={message.id}
                                                 content={message.content}
@@ -305,7 +323,7 @@ export default function Home() {
                                 }
                                 return null;
                             })}
-                            {isPending && messages[messages.length -1]?.role === 'user' && <LoadingMessage />}
+                            {isPending && <LoadingMessage />}
                         </div>
                         )}
                         </div>

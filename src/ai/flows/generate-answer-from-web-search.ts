@@ -4,14 +4,14 @@
  * @fileOverview This file defines a Genkit flow that answers user questions by searching the web
  *  and using an AI model to generate a comprehensive answer based on the search results.
  *
- * - generateAnswerFromWebSearch - The function to generate answers from web search results.
- * - GenerateAnswerFromWebSearchInput - The input type for the generateAnswerFromWebSearch function.
- * - GenerateAnswerFromWebSearchOutput - The output type for the generateAnswerFromWebSearch function.
+ * - streamAnswerFromWebSearch - The function to generate answers from web search results.
+ * - GenerateAnswerFromWebSearchInput - The input type for the streamAnswerFromWebSearch function.
  */
 
 import {ai} from '@/ai/genkit';
 import {z} from 'genkit';
 import {searchTheWeb} from '@/services/search';
+import { __SOURCES_DELIMITER__ } from '@/app/page';
 
 const GenerateAnswerFromWebSearchInputSchema = z.object({
   question: z.string().describe('The question to answer using web search.'),
@@ -19,20 +19,6 @@ const GenerateAnswerFromWebSearchInputSchema = z.object({
 export type GenerateAnswerFromWebSearchInput = z.infer<
   typeof GenerateAnswerFromWebSearchInputSchema
 >;
-
-const GenerateAnswerFromWebSearchOutputSchema = z.object({
-  answer: z.string().describe('The comprehensive answer to the question.'),
-  sources: z.array(z.string()).describe('The URLs of the web pages used to generate the answer.'),
-});
-export type GenerateAnswerFromWebSearchOutput = z.infer<
-  typeof GenerateAnswerFromWebSearchOutputSchema
->;
-
-export async function generateAnswerFromWebSearch(
-  input: GenerateAnswerFromWebSearchInput
-): Promise<GenerateAnswerFromWebSearchOutput> {
-  return generateAnswerFromWebSearchFlow(input);
-}
 
 const webSearchTool = ai.defineTool({
   name: 'searchTheWeb',
@@ -49,37 +35,11 @@ async (input) => {
   return { results: results };
 });
 
-const answerPrompt = ai.definePrompt({
-  name: 'answerPrompt',
-  input: {schema: GenerateAnswerFromWebSearchInputSchema},
-  output: {schema: GenerateAnswerFromWebSearchOutputSchema},
-  tools: [webSearchTool],
-  system: `You are a helpful assistant. Your goal is to answer the user's question.
-
-- If the user's question is clearly informational and requires up-to-date facts or data from the web, you MUST use the \`searchTheWeb\` tool.
-- If the user's question is creative, subjective, a request for a story/poem, a math problem, or can be answered with general knowledge, you MUST NOT use the \`searchTheWeb\` tool. Answer it directly.
-- When you use the \`searchTheWeb\` tool, your answer must be based on the content of the web pages you find.
-- When you use search, you must include the links to the sources in your answer.`,
-  prompt: `Question: {{{question}}}`,
-});
-
-const generateAnswerFromWebSearchFlow = ai.defineFlow(
-  {
-    name: 'generateAnswerFromWebSearchFlow',
-    inputSchema: GenerateAnswerFromWebSearchInputSchema,
-    outputSchema: GenerateAnswerFromWebSearchOutputSchema,
-  },
-  async input => {
-    const {output} = await answerPrompt(input);
-    return output!;
-  }
-);
-
 export async function streamAnswerFromWebSearch(
   input: GenerateAnswerFromWebSearchInput
 ): Promise<ReadableStream<string>> {
-  const { stream } = ai.generate({
-    model: 'googleai/gemini-2.5-flash',
+  const { stream, response } = ai.generate({
+    model: 'gemini-2.5-flash',
     prompt: `Question: ${input.question}`,
     tools: [webSearchTool],
     system: `You are a helpful assistant. Your goal is to answer the user's question.
@@ -91,16 +51,38 @@ export async function streamAnswerFromWebSearch(
   });
 
   const encoder = new TextEncoder();
-  const readableStream = new ReadableStream({
-    async start(controller) {
-      for await (const chunk of stream) {
-        if (chunk.text) {
-          controller.enqueue(encoder.encode(chunk.text));
-        }
+  const transformStream = new TransformStream({
+    async transform(chunk, controller) {
+      if (chunk.text) {
+        controller.enqueue(encoder.encode(chunk.text));
       }
-      controller.close();
     },
   });
+  
+  const writer = transformStream.writable.getWriter();
+  (async () => {
+    try {
+        for await (const chunk of stream) {
+            if (chunk.text) {
+                await writer.write(encoder.encode(chunk.text));
+            }
+        }
+        const finalResponse = await response;
+        const sources = finalResponse.toolRequests
+          .map(tr => tr.tool.output?.results)
+          .flat()
+          .filter(Boolean) as string[];
 
-  return readableStream;
+        if (sources.length > 0) {
+          await writer.write(encoder.encode( __SOURCES_DELIMITER__ + JSON.stringify(sources)));
+        }
+    } catch (e) {
+        console.error('Error during stream processing:', e);
+        writer.abort(e);
+    } finally {
+        writer.close();
+    }
+  })();
+
+  return transformStream.readable;
 }
