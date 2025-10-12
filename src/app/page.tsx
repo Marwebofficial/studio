@@ -50,56 +50,56 @@ const formSchema = z.object({
 });
 
 const UserMessage = ({ content }: { content: string }) => (
-  <div className="flex items-start gap-4">
+  <div className="flex items-start gap-3 justify-end">
+    <div className="max-w-xl w-full space-y-2">
+        <div className="bg-primary text-primary-foreground p-3 rounded-xl rounded-br-none">
+            <p className="text-sm">{content}</p>
+        </div>
+    </div>
     <Avatar className="h-8 w-8 border">
       <AvatarFallback>
         <User className="h-4 w-4" />
       </AvatarFallback>
     </Avatar>
-    <div className="flex-1 space-y-2">
-      <p className="font-semibold">You</p>
-      <div className="prose prose-sm max-w-none text-foreground">
-        <p>{content}</p>
-      </div>
-    </div>
   </div>
 );
 
 const AssistantMessage = ({ content, sources }: { content: string, sources?: string[] }) => (
-    <div className="flex items-start gap-4">
-      <Avatar className="h-8 w-8 border bg-primary text-primary-foreground">
-        <AvatarFallback className="bg-primary text-primary-foreground">
-          <Bot className="h-4 w-4" />
-        </AvatarFallback>
-      </Avatar>
-      <div className="flex-1 space-y-4">
-        <p className="font-semibold">Web Chat Navigator</p>
-        <div className="prose prose-sm max-w-none text-foreground">
-            <ReactMarkdown>{content}</ReactMarkdown>
-        </div>
-        {sources && sources.length > 0 && (
-          <div>
-            <Separator className="my-4" />
-            <div className="space-y-2">
-              <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Sources</h3>
-              <div className="flex flex-wrap gap-2">
-                {sources.map((source, index) => (
-                  <a
-                    key={index}
-                    href={source}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex items-center gap-1.5 rounded-full bg-muted px-3 py-1 text-xs text-muted-foreground transition-colors hover:bg-secondary"
-                  >
-                    <ExternalLink className="h-3 w-3" />
-                    {new URL(source).hostname}
-                  </a>
-                ))}
-              </div>
+    <div className="flex items-start gap-3">
+        <Avatar className="h-8 w-8 border bg-card text-primary">
+            <AvatarFallback className="bg-card text-primary">
+                <Bot className="h-4 w-4" />
+            </AvatarFallback>
+        </Avatar>
+        <div className="max-w-xl w-full space-y-4">
+            <div className="bg-card p-3 rounded-xl rounded-bl-none border">
+                <div className="prose prose-sm max-w-none text-foreground">
+                    <ReactMarkdown>{content}</ReactMarkdown>
+                </div>
+                {sources && sources.length > 0 && (
+                <div>
+                    <Separator className="my-4" />
+                    <div className="space-y-2">
+                    <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Sources</h3>
+                    <div className="flex flex-wrap gap-2">
+                        {sources.map((source, index) => (
+                        <a
+                            key={index}
+                            href={source}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="flex items-center gap-1.5 rounded-full bg-muted px-3 py-1 text-xs text-muted-foreground transition-colors hover:bg-secondary"
+                        >
+                            <ExternalLink className="h-3 w-3" />
+                            {new URL(source).hostname}
+                        </a>
+                        ))}
+                    </div>
+                    </div>
+                </div>
+                )}
             </div>
-          </div>
-        )}
-      </div>
+        </div>
     </div>
   );
   
@@ -120,16 +120,20 @@ const ErrorMessage = ({ content }: { content: string }) => (
 );
 
 const LoadingMessage = () => (
-  <div className="flex items-start gap-4">
-    <Avatar className="h-8 w-8 border bg-primary/10 text-primary">
-      <AvatarFallback className="bg-transparent text-primary">
-        <Bot className="h-4 w-4" />
-      </AvatarFallback>
+  <div className="flex items-start gap-3">
+    <Avatar className="h-8 w-8 border bg-card text-primary">
+        <AvatarFallback className="bg-card text-primary">
+            <Bot className="h-4 w-4" />
+        </AvatarFallback>
     </Avatar>
-    <div className="flex-1 space-y-2 pt-1.5">
-      <p className="font-semibold">Web Chat Navigator</p>
-      <Skeleton className="h-4 w-3/4" />
-      <Skeleton className="h-4 w-1/2" />
+    <div className="max-w-xl w-full space-y-2">
+      <div className="bg-card p-3 rounded-xl rounded-bl-none border">
+        <div className="flex items-center gap-2">
+            <Skeleton className="h-4 w-4 rounded-full" />
+            <Skeleton className="h-4 w-32" />
+        </div>
+        <Skeleton className="h-4 w-48 mt-2" />
+      </div>
     </div>
   </div>
 );
@@ -249,8 +253,8 @@ export default function Home() {
 
   return (
     <SidebarProvider>
-        <div className="flex h-svh w-full bg-muted/20">
-            <Sidebar collapsible="icon" className="border-r-0 md:bg-transparent md:border-r">
+        <div className="flex h-svh w-full bg-background">
+            <Sidebar collapsible="icon" className="border-r-0 md:bg-card md:border-r">
                 <SidebarHeader>
                   <Button variant="ghost" className="w-full justify-start h-10">
                     <MessageSquarePlus className="mr-2" />
@@ -263,7 +267,7 @@ export default function Home() {
             </Sidebar>
 
             <div className="flex flex-1 flex-col h-svh">
-                <header className="flex items-center gap-3 border-b bg-background p-4 h-16">
+                <header className="flex items-center gap-3 border-b bg-card p-4 h-16">
                     <SidebarTrigger className="md:hidden"/>
                     <h1 className="text-lg font-semibold tracking-tight">
                         Web Chat Navigator
@@ -272,13 +276,13 @@ export default function Home() {
                 
                 <main className="flex-1 overflow-hidden">
                     <ScrollArea className="h-full" viewportRef={scrollAreaViewportRef}>
-                        <div className="mx-auto max-w-3xl p-4 md:p-8">
+                        <div className="mx-auto max-w-3xl p-4 md:p-6">
                         {messages.length === 0 ? (
                             <div className="flex flex-col items-center justify-center h-full min-h-[calc(100vh-14rem)]">
-                                <Card className="w-full max-w-2xl text-center shadow-none border-0">
+                                <Card className="w-full max-w-2xl text-center shadow-none border-0 bg-transparent">
                                     <CardHeader className="gap-2">
                                         <div className="flex justify-center">
-                                            <Avatar className="h-16 w-16 border-2 border-primary/20 bg-background">
+                                            <Avatar className="h-16 w-16 border-2 border-primary/20 bg-card">
                                                 <AvatarFallback className="bg-transparent">
                                                     <Bot className="h-8 w-8 text-primary" />
                                                 </AvatarFallback>
@@ -292,7 +296,7 @@ export default function Home() {
                                                 <Button 
                                                     key={prompt}
                                                     variant="outline"
-                                                    className="text-left justify-start h-auto py-3 px-4 font-normal"
+                                                    className="text-left justify-start h-auto py-3 px-4 font-normal bg-card"
                                                     onClick={() => handlePrompt(prompt)}
                                                 >
                                                     {prompt}
@@ -303,7 +307,7 @@ export default function Home() {
                                 </Card>
                             </div>
                         ) : (
-                        <div className="space-y-8">
+                        <div className="space-y-6">
                             {messages.map((message) => {
                                 if (message.role === 'user') {
                                     return <UserMessage key={message.id} content={message.content} />;
@@ -330,7 +334,7 @@ export default function Home() {
                     </ScrollArea>
                 </main>
 
-                <footer className="bg-background border-t p-4">
+                <footer className="bg-card border-t p-4">
                     <div className="mx-auto max-w-3xl">
                     <Form {...form}>
                         <form
@@ -348,14 +352,14 @@ export default function Home() {
                                     autoComplete="off"
                                     disabled={isPending}
                                     {...field}
-                                    className="pr-12 h-12"
+                                    className="pr-12 h-12 bg-background rounded-full"
                                 />
                                 </FormControl>
                                 <FormMessage />
                             </FormItem>
                             )}
                         />
-                        <Button type="submit" size="icon" disabled={isPending} className="absolute top-1/2 right-2 -translate-y-1/2 h-8 w-8 rounded-full">
+                        <Button type="submit" size="icon" disabled={isPending} className="absolute top-1/2 right-2 -translate-y-1/2 h-9 w-9 rounded-full bg-accent hover:bg-accent/90">
                             <Send className="h-4 w-4" />
                             <span className="sr-only">Send</span>
                         </Button>
