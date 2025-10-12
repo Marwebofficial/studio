@@ -79,7 +79,7 @@ const generateAnswerFromWebSearchFlow = ai.defineFlow(
 export async function streamAnswerFromWebSearch(
   input: GenerateAnswerFromWebSearchInput
 ): Promise<ReadableStream<string>> {
-  const { stream } = await ai.generate({
+  const { stream, response } = ai.generate({
     model: 'googleai/gemini-2.5-flash',
     prompt: `Question: ${input.question}`,
     tools: [webSearchTool],
