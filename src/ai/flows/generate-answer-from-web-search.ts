@@ -74,3 +74,66 @@ const generateAnswerFromWebSearchFlow = ai.defineFlow(
     return output!;
   }
 );
+
+
+export async function streamAnswerFromWebSearch(
+  input: GenerateAnswerFromWebSearchInput
+): Promise<ReadableStream<string>> {
+  const { stream } = await ai.generate({
+    model: ai.model('gemini-2.5-flash'),
+    prompt: `Question: ${input.question}`,
+    tools: [webSearchTool],
+    system: `You are a helpful assistant. Your goal is to answer the user's question.
+
+- If the user's question is clearly informational and requires up-to-date facts or data from the web, you MUST use the \`searchTheWeb\` tool.
+- If the user's question is creative, subjective, a request for a story/poem, a math problem, or can be answered with general knowledge, you MUST NOT use the \`searchTheWeb\` tool. Answer it directly.
+- When you use the \`searchTheWeb\` tool, your answer must be based on the content of the web pages you find.
+- When you use search, you must include the links to the sources in your answer.`,
+  });
+
+  const reader = stream.getReader();
+  return new ReadableStream({
+    async pull(controller) {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) {
+          controller.close();
+          break;
+        }
+        if (value.text) {
+          controller.enqueue(value.text);
+        }
+        if (value.toolRequest) {
+          const toolResponse = await webSearchTool(value.toolRequest.input);
+          const { stream: stream2 } = await ai.generate({
+            model: ai.model('gemini-2.5-flash'),
+            prompt: `Question: ${input.question}`,
+            history: [
+              { role: 'user', content: [{text: `Question: ${input.question}`}]},
+              { role: 'model', content: [{toolRequest: value.toolRequest}] },
+              { role: 'tool',
+                content: [{
+                  toolResponse: {
+                    name: value.toolRequest.name,
+                    response: toolResponse,
+                  }
+                }]
+              }
+            ],
+          });
+          const reader2 = stream2.getReader();
+          while (true) {
+            const { done, value } = await reader2.read();
+            if (done) {
+              controller.close();
+              break;
+            }
+            if (value.text) {
+              controller.enqueue(value.text);
+            }
+          }
+        }
+      }
+    },
+  });
+}

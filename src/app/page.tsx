@@ -7,7 +7,7 @@ import * as z from 'zod';
 import { Bot, User, Send, ExternalLink, MessageSquarePlus, CornerDownLeft } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 
-import { getAnswer } from '@/app/actions';
+import { streamAnswer } from '@/app/actions';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -171,27 +171,58 @@ export default function Home() {
     form.reset();
 
     startTransition(async () => {
-      const result = await getAnswer(question);
+      try {
+        const stream = await streamAnswer(question);
+        const reader = stream.getReader();
+        const decoder = new TextDecoder();
+        let fullResponse = '';
+        const assistantMessageId = crypto.randomUUID();
 
-      if (result.error) {
-        toast({
-          variant: 'destructive',
-          title: 'Error',
-          description: result.error,
-        });
-        setMessages((prev) => [
-            ...prev,
-            { id: crypto.randomUUID(), role: 'error', content: result.error! },
-        ]);
-      } else {
         setMessages((prev) => [
           ...prev,
           {
-            id: crypto.randomUUID(),
+            id: assistantMessageId,
             role: 'assistant',
-            content: result.answer!,
-            sources: result.sources,
+            content: '▍',
+            sources: [],
           },
+        ]);
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) {
+            break;
+          }
+          fullResponse += decoder.decode(value, { stream: true });
+
+          setMessages((prev) =>
+            prev.map((msg) =>
+              msg.id === assistantMessageId
+                ? { ...msg, content: fullResponse + '▍' }
+                : msg
+            )
+          );
+        }
+        
+        // Final update without the cursor
+        setMessages((prev) =>
+          prev.map((msg) =>
+            msg.id === assistantMessageId
+              ? { ...msg, content: fullResponse }
+              : msg
+          )
+        );
+
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred.';
+        toast({
+          variant: 'destructive',
+          title: 'Error',
+          description: errorMessage,
+        });
+        setMessages((prev) => [
+            ...prev,
+            { id: crypto.randomUUID(), role: 'error', content: errorMessage },
         ]);
       }
     });
@@ -279,7 +310,7 @@ export default function Home() {
                                 }
                                 return null;
                             })}
-                            {isPending && <LoadingMessage />}
+                            {isPending && messages[messages.length -1]?.role !== 'assistant' && <LoadingMessage />}
                         </div>
                         )}
                         </div>

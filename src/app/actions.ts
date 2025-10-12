@@ -3,6 +3,7 @@
 import {
   generateAnswerFromWebSearch,
   GenerateAnswerFromWebSearchOutput,
+  streamAnswerFromWebSearch,
 } from '@/ai/flows/generate-answer-from-web-search';
 import { z } from 'zod';
 
@@ -32,4 +33,11 @@ export async function getAnswer(question: string): Promise<ActionResult> {
       error: `Sorry, I encountered a problem: ${errorMessage}`,
     };
   }
+}
+
+export async function streamAnswer(
+  question: string
+): Promise<ReadableStream<string>> {
+  const validatedQuestion = QuestionSchema.parse(question);
+  return await streamAnswerFromWebSearch({ question: validatedQuestion });
 }
