@@ -54,12 +54,13 @@ const answerPrompt = ai.definePrompt({
   input: {schema: GenerateAnswerFromWebSearchInputSchema},
   output: {schema: GenerateAnswerFromWebSearchOutputSchema},
   tools: [webSearchTool],
-  prompt: `Answer the following question. If the question is informational, use the web search tool to find relevant information. If the question is creative or doesn't require a search, answer it directly.
+  system: `You are a helpful assistant. Your goal is to answer the user's question.
 
-Question: {{{question}}}
-
-When you use the searchTheWeb tool, your answer must be based on the content of the web pages you find. Include the links to the sources in the answer.
-`,
+- If the user's question is clearly informational and requires up-to-date facts or data from the web, you MUST use the \`searchTheWeb\` tool.
+- If the user's question is creative, subjective, a request for a story/poem, a math problem, or can be answered with general knowledge, you MUST NOT use the \`searchTheWeb\` tool. Answer it directly.
+- When you use the \`searchTheWeb\` tool, your answer must be based on the content of the web pages you find.
+- When you use search, you must include the links to the sources in your answer.`,
+  prompt: `Question: {{{question}}}`,
 });
 
 const generateAnswerFromWebSearchFlow = ai.defineFlow(
