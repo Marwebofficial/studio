@@ -80,7 +80,7 @@ export async function streamAnswerFromWebSearch(
   input: GenerateAnswerFromWebSearchInput
 ): Promise<ReadableStream<string>> {
   const { stream } = await ai.generate({
-    model: ai.model('gemini-2.5-flash'),
+    model: 'googleai/gemini-2.5-flash',
     prompt: `Question: ${input.question}`,
     tools: [webSearchTool],
     system: `You are a helpful assistant. Your goal is to answer the user's question.
@@ -106,7 +106,7 @@ export async function streamAnswerFromWebSearch(
         if (value.toolRequest) {
           const toolResponse = await webSearchTool(value.toolRequest.input);
           const { stream: stream2 } = await ai.generate({
-            model: ai.model('gemini-2.5-flash'),
+            model: 'googleai/gemini-2.5-flash',
             prompt: `Question: ${input.question}`,
             history: [
               { role: 'user', content: [{text: `Question: ${input.question}`}]},
