@@ -54,11 +54,11 @@ const answerPrompt = ai.definePrompt({
   input: {schema: GenerateAnswerFromWebSearchInputSchema},
   output: {schema: GenerateAnswerFromWebSearchOutputSchema},
   tools: [webSearchTool],
-  prompt: `Answer the following question based on the information you find by searching the web.
+  prompt: `Answer the following question. If the question is informational, use the web search tool to find relevant information. If the question is creative or doesn't require a search, answer it directly.
 
 Question: {{{question}}}
 
-Use the searchTheWeb tool to find relevant web pages.  Your answer must be based on the content of the web pages you find. Include the links to the sources in the answer.  If the search results don't contain the answer, respond that you were unable to find the answer.
+When you use the searchTheWeb tool, your answer must be based on the content of the web pages you find. Include the links to the sources in the answer.
 `,
 });
 
