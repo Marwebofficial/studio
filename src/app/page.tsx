@@ -46,6 +46,12 @@ type Message = {
   createdAt: Date;
 };
 
+type Chat = {
+  id: string;
+  messages: Message[];
+  createdAt: Date;
+};
+
 const formSchema = z.object({
   question: z.string().min(1, 'Please enter a question.'),
 });
@@ -139,11 +145,53 @@ const examplePrompts = [
 
 export default function Home() {
   const { toast } = useToast();
-  const [messages, setMessages] = useState<Message[]>([]);
+  const [chats, setChats] = useState<Chat[]>([]);
+  const [activeChatId, setActiveChatId] = useState<string | null>(null);
   const [imageDataUri, setImageDataUri] = useState<string | undefined>();
   const [isPending, startTransition] = useTransition();
   const scrollAreaViewportRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const activeChat = chats.find((chat) => chat.id === activeChatId);
+  const messages = activeChat?.messages ?? [];
+
+  useEffect(() => {
+    // Load chats from localStorage on initial render
+    const savedChats = localStorage.getItem('chats');
+    if (savedChats) {
+      try {
+        const parsedChats: Chat[] = JSON.parse(savedChats, (key, value) => {
+          if (key === 'createdAt') {
+            return new Date(value);
+          }
+          return value;
+        });
+        setChats(parsedChats);
+        if (parsedChats.length > 0) {
+          setActiveChatId(parsedChats[parsedChats.length - 1].id);
+        }
+      } catch (e) {
+        console.error("Failed to parse chats from localStorage", e);
+      }
+    }
+  }, []);
+
+  useEffect(() => {
+    // Save chats to localStorage whenever they change
+    if (chats.length > 0) {
+      localStorage.setItem('chats', JSON.stringify(chats));
+    }
+  }, [chats]);
+  
+  const handleNewChat = () => {
+    const newChat: Chat = {
+      id: crypto.randomUUID(),
+      messages: [],
+      createdAt: new Date(),
+    };
+    setChats(prev => [...prev, newChat]);
+    setActiveChatId(newChat.id);
+  };
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
@@ -153,8 +201,19 @@ export default function Home() {
   });
 
   const handlePrompt = (prompt: string) => {
+    let currentChatId = activeChatId;
+    if (!currentChatId) {
+      const newChat: Chat = {
+        id: crypto.randomUUID(),
+        messages: [],
+        createdAt: new Date(),
+      };
+      setChats(prev => [...prev, newChat]);
+      currentChatId = newChat.id;
+      setActiveChatId(newChat.id);
+    }
     form.setValue('question', prompt);
-    form.handleSubmit(onSubmit)();
+    form.handleSubmit((data) => onSubmit(data, currentChatId!))();
   };
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -175,7 +234,7 @@ export default function Home() {
     }
   }
 
-  const onSubmit = (data: z.infer<typeof formSchema>) => {
+  const onSubmit = (data: z.infer<typeof formSchema>, chatId: string) => {
     const question = data.question;
     const currentImageDataUri = imageDataUri;
 
@@ -185,36 +244,68 @@ export default function Home() {
         fileInputRef.current.value = '';
     }
     
-    setMessages((prev) => [
-      ...prev,
-      { id: crypto.randomUUID(), role: 'user', content: question, imageDataUri: currentImageDataUri, createdAt: new Date() },
-    ]);
+    const userMessage: Message = { id: crypto.randomUUID(), role: 'user', content: question, imageDataUri: currentImageDataUri, createdAt: new Date() };
+
+    setChats(prev => prev.map(chat => 
+      chat.id === chatId 
+        ? { ...chat, messages: [...chat.messages, userMessage] } 
+        : chat
+    ));
 
     startTransition(async () => {
-      setMessages((prev) => [...prev, { id: crypto.randomUUID(), role: 'assistant', content: '', createdAt: new Date() } ]);
+      const assistantMessage: Message = { id: crypto.randomUUID(), role: 'assistant', content: '', createdAt: new Date() };
+      setChats(prev => prev.map(chat =>
+        chat.id === chatId
+          ? { ...chat, messages: [...chat.messages, assistantMessage] }
+          : chat
+      ));
+
       try {
         const answer = await getAnswer(question, currentImageDataUri);
         
-        setMessages((prev) =>
-          prev.map((msg, i) =>
-            i === prev.length - 1 ? { ...msg, content: answer } : msg
-          )
-        );
+        setChats(prev => prev.map(chat => {
+          if (chat.id === chatId) {
+            return {
+              ...chat,
+              messages: chat.messages.map(msg => 
+                msg.id === assistantMessage.id ? { ...msg, content: answer } : msg
+              )
+            };
+          }
+          return chat;
+        }));
 
       } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred.';
-        setMessages((prev) => [
-          ...prev.slice(0, -1),
-          { id: crypto.randomUUID(), role: 'error', content: errorMessage, createdAt: new Date() }
-        ]);
+        const errorMessageContent = error instanceof Error ? error.message : 'An unknown error occurred.';
+        const errorMessage: Message = { id: crypto.randomUUID(), role: 'error', content: errorMessageContent, createdAt: new Date() };
+
+        setChats(prev => prev.map(chat => {
+          if (chat.id === chatId) {
+            // Replace the loading message with the error message
+            return {
+              ...chat,
+              messages: [
+                ...chat.messages.slice(0, -1),
+                errorMessage
+              ]
+            }
+          }
+          return chat;
+        }));
+
         toast({
           variant: 'destructive',
           title: 'Error',
-          description: errorMessage,
+          description: errorMessageContent,
         });
       }
     });
   };
+
+  const getChatTitle = (chat: Chat) => {
+    const firstUserMessage = chat.messages.find(m => m.role === 'user');
+    return firstUserMessage?.content || 'New Chat';
+  }
 
   useEffect(() => {
     if (scrollAreaViewportRef.current) {
@@ -230,13 +321,26 @@ export default function Home() {
         <div className="flex h-svh w-full bg-background">
             <Sidebar collapsible="icon" className="border-r-0 md:bg-card/50 backdrop-blur-sm md:border-r">
                 <SidebarHeader>
-                  <Button variant="ghost" className="w-full justify-start h-10">
+                  <Button variant="ghost" className="w-full justify-start h-10" onClick={handleNewChat}>
                     <MessageSquarePlus className="mr-2" />
                     New Chat
                   </Button>
                 </SidebarHeader>
                 <SidebarContent className="p-2">
-                    {/* Chat History would go here */}
+                    <ScrollArea className="h-full">
+                        <div className="flex flex-col gap-1 pr-2">
+                            {chats.slice().reverse().map(chat => (
+                                <Button
+                                    key={chat.id}
+                                    variant={activeChatId === chat.id ? 'secondary' : 'ghost'}
+                                    className="w-full justify-start h-8 text-sm truncate"
+                                    onClick={() => setActiveChatId(chat.id)}
+                                >
+                                    {getChatTitle(chat)}
+                                </Button>
+                            ))}
+                        </div>
+                    </ScrollArea>
                 </SidebarContent>
             </Sidebar>
 
@@ -309,7 +413,16 @@ export default function Home() {
                     <div className="mx-auto max-w-3xl">
                     <Form {...form}>
                         <form
-                        onSubmit={form.handleSubmit(onSubmit)}
+                        onSubmit={form.handleSubmit((data) => {
+                            if (!activeChatId) {
+                                const newChat: Chat = { id: crypto.randomUUID(), messages: [], createdAt: new Date() };
+                                setChats(prev => [...prev, newChat]);
+                                setActiveChatId(newChat.id);
+                                onSubmit(data, newChat.id);
+                            } else {
+                                onSubmit(data, activeChatId);
+                            }
+                        })}
                         className="relative"
                         >
                           <div className="relative">
