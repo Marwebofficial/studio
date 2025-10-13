@@ -9,7 +9,6 @@
  */
 
 import {ai} from '@/ai/genkit';
-import {generate} from 'genkit';
 import {z} from 'genkit';
 
 const GenerateAnswerInputSchema = z.object({
@@ -29,7 +28,7 @@ export async function generateAnswer(
   }
   prompt.push({ text: input.question });
 
-  const llmResponse = await generate({
+  const llmResponse = await ai.generate({
     prompt: prompt,
     model: 'googleai/gemini-2.5-flash',
     system: `You are a helpful AI assistant named freechat tutor. You are also an expert exam writing tutor. You can provide practice questions, grade answers, give feedback on writing style, explain complex concepts, and offer exam strategies. You can also answer general questions on any topic. When a user asks a question, respond in a helpful, encouraging, and educational tone.`,
