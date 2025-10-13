@@ -111,37 +111,40 @@ const AssistantMessage = ({ content }: { content: React.ReactNode | string }) =>
     const [audio, setAudio] = useState<HTMLAudioElement | null>(null);
     const [isPlaying, setIsPlaying] = useState(false);
     const [isGenerating, setIsGenerating] = useState(false);
+
+    useEffect(() => {
+        const prefetchAudio = async () => {
+            if (typeof content !== 'string' || content.length === 0) return;
+
+            setIsGenerating(true);
+            const { media, error } = await speak(content);
+            setIsGenerating(false);
+
+            if (error) {
+                console.error('Error pre-fetching speech:', error);
+                return;
+            }
+
+            if (media) {
+                const newAudio = new Audio(media);
+                newAudio.onplay = () => setIsPlaying(true);
+                newAudio.onpause = () => setIsPlaying(false);
+                newAudio.onended = () => setIsPlaying(false);
+                setAudio(newAudio);
+            }
+        };
+
+        prefetchAudio();
+    }, [content]);
   
     const handleSpeak = async () => {
-      if (typeof content !== 'string') return;
       if (audio) {
         if (isPlaying) {
           audio.pause();
-          setIsPlaying(false);
+          audio.currentTime = 0;
         } else {
           audio.play();
-          setIsPlaying(true);
         }
-        return;
-      }
-  
-      setIsGenerating(true);
-      const { media, error } = await speak(content);
-      setIsGenerating(false);
-  
-      if (error) {
-        // You might want to show a toast or an error message to the user
-        console.error('Error generating speech:', error);
-        return;
-      }
-  
-      if (media) {
-        const newAudio = new Audio(media);
-        newAudio.onplay = () => setIsPlaying(true);
-        newAudio.onpause = () => setIsPlaying(false);
-        newAudio.onended = () => setIsPlaying(false);
-        setAudio(newAudio);
-        newAudio.play();
       }
     };
   
@@ -154,15 +157,15 @@ const AssistantMessage = ({ content }: { content: React.ReactNode | string }) =>
         </Avatar>
         <div className="max-w-xl w-full space-y-2">
             <div className="bg-accent/10 p-3 rounded-xl rounded-bl-none border border-accent/20 group relative">
-                <div className="prose prose-sm prose-invert max-w-none text-foreground">
+                <div className="prose prose-sm prose-invert max-w-none text-foreground pb-6">
                     {typeof content === 'string' ? <ReactMarkdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]}>{content}</ReactMarkdown> : content}
                 </div>
                 <Button 
                   size="icon" 
                   variant="ghost" 
                   onClick={handleSpeak} 
-                  disabled={isGenerating}
-                  className="h-7 w-7 absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity"
+                  disabled={isGenerating || !audio}
+                  className="h-7 w-7 absolute bottom-1 right-1"
                 >
                   {isGenerating ? <Loader className="h-4 w-4 animate-spin" /> : <Volume2 className="h-4 w-4" />}
                 </Button>
