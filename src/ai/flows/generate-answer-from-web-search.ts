@@ -9,8 +9,7 @@
  */
 
 import {ai} from '@/ai/genkit';
-import { streamFlow, type Flow } from '@genkit-ai/flow';
-import {z} from 'genkit';
+import {z, streamFlow, type Flow} from 'genkit';
 
 const GenerateAnswerInputSchema = z.object({
   question: z.string().describe('The question to answer.'),
