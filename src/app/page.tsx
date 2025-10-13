@@ -8,6 +8,8 @@ import { Bot, User, Send, Code, MessageSquarePlus, Paperclip, X } from 'lucide-r
 import ReactMarkdown from 'react-markdown';
 import Image from 'next/image';
 import { format } from 'date-fns';
+import remarkMath from 'remark-math';
+import rehypeKatex from 'rehype-katex';
 
 import { getAnswer } from '@/app/actions';
 import { Button } from '@/components/ui/button';
@@ -94,7 +96,7 @@ const AssistantMessage = ({ content }: { content: string }) => (
       <div className="max-w-xl w-full space-y-4">
         <div className="bg-accent/10 p-3 rounded-xl rounded-bl-none border border-accent/20">
             <div className="prose prose-sm prose-invert max-w-none text-foreground">
-                <ReactMarkdown>{content}</ReactMarkdown>
+                <ReactMarkdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]}>{content}</ReactMarkdown>
             </div>
         </div>
       </div>
@@ -210,7 +212,7 @@ export default function Home() {
       };
       setChats(prev => [...prev, newChat]);
       currentChatId = newChat.id;
-      setActiveChatId(newChat.id);
+      setActiveChatId(currentChatId);
     }
     form.setValue('question', prompt);
     form.handleSubmit((data) => onSubmit(data, currentChatId!))();

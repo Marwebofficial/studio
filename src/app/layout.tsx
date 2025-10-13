@@ -3,6 +3,7 @@ import { Inter as FontSans } from 'next/font/google';
 import './globals.css';
 import { Toaster } from '@/components/ui/toaster';
 import { cn } from '@/lib/utils';
+import 'katex/dist/katex.min.css';
 
 const fontSans = FontSans({ 
   subsets: ['latin'], 
