@@ -11,8 +11,8 @@ const fontSans = FontSans({
 });
 
 export const metadata: Metadata = {
-  title: 'Exam Writing Tutor',
-  description: 'Your personal AI tutor to help you ace any exam.',
+  title: 'freechat tutor',
+  description: 'Your personal AI tutor to help you with any questions.',
 };
 
 export default function RootLayout({
