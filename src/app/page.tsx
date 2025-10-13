@@ -10,9 +10,8 @@ import Image from 'next/image';
 import { format } from 'date-fns';
 import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
-import { useStreamableValue } from 'ai/rsc';
 
-import { getAnswerStream } from '@/app/actions';
+import { getAnswer } from '@/app/actions';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -49,6 +48,7 @@ import {
   SidebarContent,
   SidebarTrigger,
 } from '@/components/ui/sidebar';
+import { Skeleton } from '@/components/ui/skeleton';
 
 const MAX_CHAT_HISTORY = 8;
 
@@ -140,29 +140,24 @@ const ErrorMessage = ({ content }: { content: string }) => (
     </div>
 );
 
-const StreamingMessage = ({ stream }: { stream: ReturnType<typeof useStreamableValue> }) => {
-    const [data] = stream;
-    const content = data || '';
-  
-    return (
-      <div className="flex items-start gap-3">
-        <Avatar className="h-8 w-8 border-2 border-accent/50">
-          <AvatarFallback className="bg-transparent">
-            <Bot className="h-4 w-4 text-accent" />
-          </AvatarFallback>
-        </Avatar>
-        <div className="max-w-xl w-full space-y-4">
-          <div className="bg-accent/10 p-3 rounded-xl rounded-bl-none border border-accent/20">
-            <div className="prose prose-sm prose-invert max-w-none text-foreground">
-              <ReactMarkdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]}>
-                {content as string}
-              </ReactMarkdown>
+const LoadingMessage = () => (
+    <div className="flex items-start gap-3">
+      <Avatar className="h-8 w-8 border-2 border-accent/50">
+        <AvatarFallback className="bg-transparent">
+          <Bot className="h-4 w-4 text-accent" />
+        </AvatarFallback>
+      </Avatar>
+      <div className="max-w-xl w-full space-y-4">
+        <div className="bg-accent/10 p-3 rounded-xl rounded-bl-none border border-accent/20">
+            <div className="space-y-2">
+                <Skeleton className="h-4 w-5/6" />
+                <Skeleton className="h-4 w-full" />
+                <Skeleton className="h-4 w-4/6" />
             </div>
-          </div>
         </div>
       </div>
-    );
-};
+    </div>
+);
 
 const examplePrompts = [
     'Give me a practice essay question for a history exam on World War II.',
@@ -183,8 +178,6 @@ export default function Home() {
 
   const activeChat = chats.find((chat) => chat.id === activeChatId);
   const messages = activeChat?.messages ?? [];
-
-  const [stream, setStream] = useState<ReturnType<typeof useStreamableValue> | null>(null);
 
   useEffect(() => {
     const savedChats = localStorage.getItem('chats');
@@ -228,7 +221,6 @@ export default function Home() {
         return updatedChats;
     });
     setActiveChatId(newChat.id);
-    setStream(null);
   };
 
   const form = useForm<z.infer<typeof formSchema>>({
@@ -307,17 +299,15 @@ export default function Home() {
     setIsPending(true);
 
     try {
-      const { output } = await getAnswerStream(question, currentFileDataUri);
+      const { answer, error } = await getAnswer(question, currentFileDataUri);
       
-      const streamValue = useStreamableValue(output);
-      setStream(streamValue);
-
-      const [data, , final] = streamValue;
-
-      const fullResponse = await final;
       setIsPending(false);
 
-      const assistantMessage: Message = { id: crypto.randomUUID(), role: 'assistant', content: fullResponse, createdAt: new Date() };
+      if (error) {
+        throw new Error(error);
+      }
+
+      const assistantMessage: Message = { id: crypto.randomUUID(), role: 'assistant', content: answer, createdAt: new Date() };
       
       setChats(prev => prev.map(chat => {
         if (chat.id === chatId) {
@@ -329,7 +319,6 @@ export default function Home() {
         return chat;
       }));
 
-      setStream(null);
 
     } catch (error) {
       setIsPending(false);
@@ -351,7 +340,6 @@ export default function Home() {
         title: 'Error',
         description: errorMessageContent,
       });
-      setStream(null);
     }
   };
 
@@ -381,7 +369,7 @@ export default function Home() {
         behavior: 'smooth',
       });
     }
-  }, [messages, activeChatId, stream]);
+  }, [messages, activeChatId, isPending]);
   
   const isImageFile = fileDataUri?.startsWith('data:image');
 
@@ -405,7 +393,6 @@ export default function Home() {
                                       className="w-full justify-start h-8 text-sm truncate pr-8"
                                       onClick={() => {
                                         setActiveChatId(chat.id);
-                                        setStream(null);
                                       }}
                                   >
                                       {getChatTitle(chat)}
@@ -438,7 +425,7 @@ export default function Home() {
                 <main className="flex-1 overflow-hidden">
                     <ScrollArea className="h-full" viewportRef={scrollAreaViewportRef}>
                         <div className="mx-auto max-w-3xl p-4 md:p-6">
-                        {messages.length === 0 && !stream ? (
+                        {messages.length === 0 && !isPending ? (
                             <div className="flex flex-col items-center justify-center h-full min-h-[calc(100vh-14rem)]">
                                 <Card className="w-full max-w-2xl text-center shadow-none border-0 bg-transparent">
                                     <CardHeader className="gap-2">
@@ -483,7 +470,7 @@ export default function Home() {
                                 }
                                 return null;
                             })}
-                            {stream && <StreamingMessage stream={stream} />}
+                            {isPending && <LoadingMessage />}
                         </div>
                         )}
                         </div>

@@ -9,7 +9,8 @@
  */
 
 import {ai} from '@/ai/genkit';
-import {z, streamFlow, type Flow} from 'genkit';
+import {generate} from 'genkit/generate';
+import {z} from 'genkit';
 
 const GenerateAnswerInputSchema = z.object({
   question: z.string().describe('The question to answer.'),
@@ -19,26 +20,23 @@ export type GenerateAnswerInput = z.infer<
   typeof GenerateAnswerInputSchema
 >;
 
-export const generateAnswerStream: Flow<GenerateAnswerInput, NodeJS.ReadableStream> = ai.defineFlow(
-  {
-    name: 'generateAnswerStream',
-    inputSchema: GenerateAnswerInputSchema,
-    outputSchema: z.any(),
-  },
-  async (input) => {
-    return await streamFlow(
-      {
-        prompt: (async () => {
-          const prompt = [];
-          if (input.fileDataUri) {
-            prompt.push({ media: { url: input.fileDataUri } });
-          }
-          prompt.push({ text: input.question });
-          return prompt;
-        })(),
-        system: `You are a helpful AI assistant named freechat tutor. You are also an expert exam writing tutor. You can provide practice questions, grade answers, give feedback on writing style, explain complex concepts, and offer exam strategies. You can also answer general questions on any topic. When a user asks a question, respond in a helpful, encouraging, and educational tone.`,
-      },
-      (chunk) => chunk.text
-    );
+export async function generateAnswer(
+  input: GenerateAnswerInput
+): Promise<string> {
+  const prompt = [];
+  if (input.fileDataUri) {
+    prompt.push({ media: { url: input.fileDataUri } });
   }
-);
+  prompt.push({ text: input.question });
+
+  const llmResponse = await generate({
+    prompt: prompt,
+    model: 'googleai/gemini-2.5-flash',
+    system: `You are a helpful AI assistant named freechat tutor. You are also an expert exam writing tutor. You can provide practice questions, grade answers, give feedback on writing style, explain complex concepts, and offer exam strategies. You can also answer general questions on any topic. When a user asks a question, respond in a helpful, encouraging, and educational tone.`,
+    output: {
+      format: 'text',
+    },
+  });
+
+  return llmResponse.text;
+}
