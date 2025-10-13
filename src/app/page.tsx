@@ -7,6 +7,7 @@ import * as z from 'zod';
 import { Bot, User, Send, Code, MessageSquarePlus, Paperclip, X } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import Image from 'next/image';
+import { format } from 'date-fns';
 
 import { getAnswer } from '@/app/actions';
 import { Button } from '@/components/ui/button';
@@ -42,13 +43,14 @@ type Message = {
   role: 'user' | 'assistant' | 'error';
   content: string;
   imageDataUri?: string;
+  createdAt: Date;
 };
 
 const formSchema = z.object({
   question: z.string().min(1, 'Please enter a question.'),
 });
 
-const UserMessage = ({ content, imageDataUri }: { content: string, imageDataUri?: string }) => (
+const UserMessage = ({ content, imageDataUri, createdAt }: { content: string, imageDataUri?: string, createdAt: Date }) => (
     <div className="flex items-start gap-3 justify-end">
       <div className="max-w-xl w-full space-y-2">
         <div className="bg-primary/10 border border-primary/20 text-foreground p-3 rounded-xl rounded-br-none">
@@ -62,6 +64,9 @@ const UserMessage = ({ content, imageDataUri }: { content: string, imageDataUri?
             />
           )}
           <p className="text-sm text-foreground">{content}</p>
+        </div>
+        <div className="text-xs text-muted-foreground text-right">
+            {format(createdAt, 'HH:mm')}
         </div>
       </div>
       <Avatar className="h-8 w-8 border-2 border-primary/50">
@@ -182,11 +187,11 @@ export default function Home() {
     
     setMessages((prev) => [
       ...prev,
-      { id: crypto.randomUUID(), role: 'user', content: question, imageDataUri: currentImageDataUri },
+      { id: crypto.randomUUID(), role: 'user', content: question, imageDataUri: currentImageDataUri, createdAt: new Date() },
     ]);
 
     startTransition(async () => {
-      setMessages((prev) => [...prev, { id: crypto.randomUUID(), role: 'assistant', content: '' } ]);
+      setMessages((prev) => [...prev, { id: crypto.randomUUID(), role: 'assistant', content: '', createdAt: new Date() } ]);
       try {
         const answer = await getAnswer(question, currentImageDataUri);
         
@@ -200,7 +205,7 @@ export default function Home() {
         const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred.';
         setMessages((prev) => [
           ...prev.slice(0, -1),
-          { id: crypto.randomUUID(), role: 'error', content: errorMessage }
+          { id: crypto.randomUUID(), role: 'error', content: errorMessage, createdAt: new Date() }
         ]);
         toast({
           variant: 'destructive',
@@ -280,7 +285,7 @@ export default function Home() {
                         <div className="space-y-6">
                             {messages.map((message) => {
                                 if (message.role === 'user') {
-                                    return <UserMessage key={message.id} content={message.content} imageDataUri={message.imageDataUri} />;
+                                    return <UserMessage key={message.id} content={message.content} imageDataUri={message.imageDataUri} createdAt={message.createdAt} />;
                                 }
 
                                 if (message.role === 'assistant') {
