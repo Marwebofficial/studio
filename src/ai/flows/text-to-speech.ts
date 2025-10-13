@@ -74,7 +74,7 @@ const textToSpeechFlow = ai.defineFlow(
     );
     const wavBase64 = await toWav(audioBuffer);
     return {
-      media: 'data:audio/wav;base64,' + wavBase4,
+      media: 'data:audio/wav;base64,' + wavBase64,
     };
   }
 );
