@@ -1,18 +1,19 @@
 'use server';
 
 import {
-  generateAnswer,
+  generateAnswerStream,
   type GenerateAnswerInput,
 } from '@/ai/flows/generate-answer-from-web-search';
+import { createStreamableValue, type StreamableValue } from 'ai/rsc';
 import { z } from 'zod';
 
 const QuestionSchema = z.string().min(1, 'Question cannot be empty.');
 const FileSchema = z.string().optional();
 
-export async function getAnswer(
+export async function getAnswerStream(
   question: string,
   fileDataUri?: string,
-): Promise<string> {
+): Promise<{ output: StreamableValue<string> }> {
   const validatedQuestion = QuestionSchema.parse(question);
   const validatedFile = FileSchema.parse(fileDataUri);
 
@@ -21,7 +22,15 @@ export async function getAnswer(
     input.fileDataUri = validatedFile;
   }
   
-  return generateAnswer(input);
-}
+  const stream = createStreamableValue();
 
-    
+  (async () => {
+    const streamResponse = await generateAnswerStream(input);
+    for await (const chunk of streamResponse) {
+      stream.update(chunk);
+    }
+    stream.done();
+  })();
+
+  return { output: stream.value };
+}

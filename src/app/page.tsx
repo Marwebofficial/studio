@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useTransition, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -10,8 +10,9 @@ import Image from 'next/image';
 import { format } from 'date-fns';
 import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
+import { useStreamableValue } from 'ai/rsc';
 
-import { getAnswer } from '@/app/actions';
+import { getAnswerStream } from '@/app/actions';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -40,7 +41,6 @@ import {
   FormItem,
   FormMessage,
 } from '@/components/ui/form';
-import { Skeleton } from '@/components/ui/skeleton';
 import { useToast } from '@/hooks/use-toast';
 import {
   SidebarProvider,
@@ -55,7 +55,7 @@ const MAX_CHAT_HISTORY = 8;
 type Message = {
   id: string;
   role: 'user' | 'assistant' | 'error';
-  content: string;
+  content: string | React.ReactNode;
   fileDataUri?: string;
   createdAt: Date;
 };
@@ -107,7 +107,7 @@ const UserMessage = ({ content, fileDataUri, createdAt }: { content: string, fil
 }
   
 
-const AssistantMessage = ({ content }: { content: string }) => (
+const AssistantMessage = ({ content }: { content: React.ReactNode | string }) => (
     <div className="flex items-start gap-3">
       <Avatar className="h-8 w-8 border-2 border-accent/50">
         <AvatarFallback className="bg-transparent">
@@ -117,7 +117,7 @@ const AssistantMessage = ({ content }: { content: string }) => (
       <div className="max-w-xl w-full space-y-4">
         <div className="bg-accent/10 p-3 rounded-xl rounded-bl-none border border-accent/20">
             <div className="prose prose-sm prose-invert max-w-none text-foreground">
-                <ReactMarkdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]}>{content}</ReactMarkdown>
+                {typeof content === 'string' ? <ReactMarkdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]}>{content}</ReactMarkdown> : content}
             </div>
         </div>
       </div>
@@ -140,24 +140,29 @@ const ErrorMessage = ({ content }: { content: string }) => (
     </div>
 );
 
-const LoadingMessage = () => (
-  <div className="flex items-start gap-3">
-    <Avatar className="h-8 w-8 border-2 border-accent/50">
-      <AvatarFallback className="bg-transparent">
-          <Bot className="h-4 w-4 text-accent" />
-      </AvatarFallback>
-    </Avatar>
-    <div className="max-w-xl w-full space-y-2">
-      <div className="bg-accent/10 p-3 rounded-xl rounded-bl-none border border-accent/20">
-        <div className="flex items-center gap-2">
-            <Skeleton className="h-4 w-4 rounded-full" />
-            <Skeleton className="h-4 w-32" />
+const StreamingMessage = ({ stream }: { stream: ReturnType<typeof useStreamableValue> }) => {
+    const [data] = stream;
+    const content = data || '';
+  
+    return (
+      <div className="flex items-start gap-3">
+        <Avatar className="h-8 w-8 border-2 border-accent/50">
+          <AvatarFallback className="bg-transparent">
+            <Bot className="h-4 w-4 text-accent" />
+          </AvatarFallback>
+        </Avatar>
+        <div className="max-w-xl w-full space-y-4">
+          <div className="bg-accent/10 p-3 rounded-xl rounded-bl-none border border-accent/20">
+            <div className="prose prose-sm prose-invert max-w-none text-foreground">
+              <ReactMarkdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]}>
+                {content as string}
+              </ReactMarkdown>
+            </div>
+          </div>
         </div>
-        <Skeleton className="h-4 w-48 mt-2" />
       </div>
-    </div>
-  </div>
-);
+    );
+};
 
 const examplePrompts = [
     'Give me a practice essay question for a history exam on World War II.',
@@ -171,13 +176,15 @@ export default function Home() {
   const [chats, setChats] = useState<Chat[]>([]);
   const [activeChatId, setActiveChatId] = useState<string | null>(null);
   const [fileDataUri, setFileDataUri] = useState<string | undefined>();
-  const [isPending, startTransition] = useTransition();
+  const [isPending, setIsPending] = useState(false);
   const scrollAreaViewportRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [chatToDelete, setChatToDelete] = useState<string | null>(null);
 
   const activeChat = chats.find((chat) => chat.id === activeChatId);
   const messages = activeChat?.messages ?? [];
+
+  const [stream, setStream] = useState<ReturnType<typeof useStreamableValue> | null>(null);
 
   useEffect(() => {
     const savedChats = localStorage.getItem('chats');
@@ -221,6 +228,7 @@ export default function Home() {
         return updatedChats;
     });
     setActiveChatId(newChat.id);
+    setStream(null);
   };
 
   const form = useForm<z.infer<typeof formSchema>>({
@@ -234,16 +242,10 @@ export default function Home() {
     let currentChatId = activeChatId;
     if (!currentChatId || (activeChat && activeChat.messages.length > 0)) {
         handleNewChat();
-        // Since state updates are async, we can't get the new chat id immediately.
-        // We will rely on the `onSubmit` to handle chat creation if activeChatId is null.
-        // A better approach would be to get the new chat ID from handleNewChat.
-        // For now, we'll work with this limitation.
-        // Let's find the newest chat that is empty.
         const newEmptyChat = chats.find(c => c.messages.length === 0);
         currentChatId = newEmptyChat ? newEmptyChat.id : activeChatId;
     }
 
-    // A small timeout to allow state to update with the new chat
     setTimeout(() => {
         form.setValue('question', prompt);
         form.handleSubmit((data) => onSubmit(data))();
@@ -268,9 +270,8 @@ export default function Home() {
     }
   }
 
-  const onSubmit = (data: z.infer<typeof formSchema>) => {
+  const onSubmit = async (data: z.infer<typeof formSchema>) => {
     let chatId = activeChatId;
-    // If there is no active chat or the active chat has messages, create a new one.
     if (!chatId || (activeChat && activeChat.messages.length > 0 && activeChat.messages.some(m=>m.role === 'user'))) {
         const newChat: Chat = { id: crypto.randomUUID(), messages: [], createdAt: new Date() };
         setChats(prev => {
@@ -302,50 +303,62 @@ export default function Home() {
         ? { ...chat, messages: [...chat.messages, userMessage] } 
         : chat
     ));
+    
+    setIsPending(true);
 
-    startTransition(async () => {
-      try {
-        const answer = await getAnswer(question, currentFileDataUri);
-        
-        const assistantMessage: Message = { id: crypto.randomUUID(), role: 'assistant', content: answer, createdAt: new Date() };
-        
-        setChats(prev => prev.map(chat => {
-          if (chat.id === chatId) {
-            return {
-              ...chat,
-              messages: [...chat.messages, assistantMessage]
-            };
+    try {
+      const { output } = await getAnswerStream(question, currentFileDataUri);
+      
+      const streamValue = useStreamableValue(output);
+      setStream(streamValue);
+
+      const [data, , final] = streamValue;
+
+      const fullResponse = await final;
+      setIsPending(false);
+
+      const assistantMessage: Message = { id: crypto.randomUUID(), role: 'assistant', content: fullResponse, createdAt: new Date() };
+      
+      setChats(prev => prev.map(chat => {
+        if (chat.id === chatId) {
+          return {
+            ...chat,
+            messages: [...chat.messages, assistantMessage]
+          };
+        }
+        return chat;
+      }));
+
+      setStream(null);
+
+    } catch (error) {
+      setIsPending(false);
+      const errorMessageContent = error instanceof Error ? error.message : 'An unknown error occurred.';
+      const errorMessage: Message = { id: crypto.randomUUID(), role: 'error', content: errorMessageContent, createdAt: new Date() };
+
+      setChats(prev => prev.map(chat => {
+        if (chat.id === chatId) {
+          return {
+            ...chat,
+            messages: [...chat.messages, errorMessage]
           }
-          return chat;
-        }));
+        }
+        return chat;
+      }));
 
-      } catch (error) {
-        const errorMessageContent = error instanceof Error ? error.message : 'An unknown error occurred.';
-        const errorMessage: Message = { id: crypto.randomUUID(), role: 'error', content: errorMessageContent, createdAt: new Date() };
-
-        setChats(prev => prev.map(chat => {
-          if (chat.id === chatId) {
-            return {
-              ...chat,
-              messages: [...chat.messages, errorMessage]
-            }
-          }
-          return chat;
-        }));
-
-        toast({
-          variant: 'destructive',
-          title: 'Error',
-          description: errorMessageContent,
-        });
-      }
-    });
+      toast({
+        variant: 'destructive',
+        title: 'Error',
+        description: errorMessageContent,
+      });
+      setStream(null);
+    }
   };
 
   const getChatTitle = (chat: Chat) => {
     if (chat.messages.length === 0) return 'New Chat';
     const firstUserMessage = chat.messages.find(m => m.role === 'user');
-    return firstUserMessage?.content || 'New Chat';
+    return (firstUserMessage?.content as string) || 'New Chat';
   }
   
   const handleDeleteChat = (chatIdToDelete: string) => {
@@ -353,8 +366,6 @@ export default function Home() {
     setChats(newChats);
 
     if (activeChatId === chatIdToDelete) {
-        // If the active chat is deleted, set the new active chat to be the most recent one
-        // or create a new one if no chats are left.
         if (newChats.length > 0) {
             setActiveChatId(newChats[0].id);
         } else {
@@ -370,7 +381,7 @@ export default function Home() {
         behavior: 'smooth',
       });
     }
-  }, [messages, activeChatId]);
+  }, [messages, activeChatId, stream]);
   
   const isImageFile = fileDataUri?.startsWith('data:image');
 
@@ -392,7 +403,10 @@ export default function Home() {
                                   <Button
                                       variant={activeChatId === chat.id ? 'secondary' : 'ghost'}
                                       className="w-full justify-start h-8 text-sm truncate pr-8"
-                                      onClick={() => setActiveChatId(chat.id)}
+                                      onClick={() => {
+                                        setActiveChatId(chat.id);
+                                        setStream(null);
+                                      }}
                                   >
                                       {getChatTitle(chat)}
                                   </Button>
@@ -424,7 +438,7 @@ export default function Home() {
                 <main className="flex-1 overflow-hidden">
                     <ScrollArea className="h-full" viewportRef={scrollAreaViewportRef}>
                         <div className="mx-auto max-w-3xl p-4 md:p-6">
-                        {messages.length === 0 ? (
+                        {messages.length === 0 && !stream ? (
                             <div className="flex flex-col items-center justify-center h-full min-h-[calc(100vh-14rem)]">
                                 <Card className="w-full max-w-2xl text-center shadow-none border-0 bg-transparent">
                                     <CardHeader className="gap-2">
@@ -456,20 +470,20 @@ export default function Home() {
                             </div>
                         ) : (
                         <div className="space-y-6">
-                            {messages.map((message, index) => {
+                            {messages.map((message) => {
                                 if (message.role === 'user') {
-                                    return <UserMessage key={message.id} content={message.content} fileDataUri={message.fileDataUri} createdAt={message.createdAt} />;
+                                    return <UserMessage key={message.id} content={message.content as string} fileDataUri={message.fileDataUri} createdAt={message.createdAt} />;
                                 }
 
                                 if (message.role === 'assistant') {
                                     return <AssistantMessage key={message.id} content={message.content} />;
                                 }
                                 if (message.role === 'error') {
-                                    return <ErrorMessage key={message.id} content={message.content} />;
+                                    return <ErrorMessage key={message.id} content={message.content as string} />;
                                 }
                                 return null;
                             })}
-                            {isPending && <LoadingMessage />}
+                            {stream && <StreamingMessage stream={stream} />}
                         </div>
                         )}
                         </div>
@@ -505,7 +519,7 @@ export default function Home() {
                           {fileDataUri && (
                             <div className="mt-4 relative w-24 h-24">
                                 {isImageFile ? (
-                                    <Image src={fileDataUri} alt="Preview" layout="fill" objectFit="cover" className="rounded-lg" />
+                                    <Image src={fileDataUri} alt="Preview" fill objectFit="cover" className="rounded-lg" />
                                 ) : (
                                     <div className="w-full h-full bg-muted rounded-lg flex items-center justify-center">
                                         <FileText className="w-10 h-10 text-muted-foreground" />
