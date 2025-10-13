@@ -108,45 +108,41 @@ const UserMessage = ({ content, fileDataUri, createdAt }: { content: string, fil
   
 
 const AssistantMessage = ({ content }: { content: React.ReactNode | string }) => {
-    const [audio, setAudio] = useState<HTMLAudioElement | null>(null);
-    const [isPlaying, setIsPlaying] = useState(false);
-    const [isGenerating, setIsGenerating] = useState(false);
+  const [audio, setAudio] = useState<HTMLAudioElement | null>(null);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [isGenerating, setIsGenerating] = useState(false);
 
-    useEffect(() => {
-        const prefetchAudio = async () => {
-            if (typeof content !== 'string' || content.length === 0) return;
-
-            setIsGenerating(true);
-            const { media, error } = await speak(content);
-            setIsGenerating(false);
-
-            if (error) {
-                console.error('Error pre-fetching speech:', error);
-                return;
-            }
-
-            if (media) {
-                const newAudio = new Audio(media);
-                newAudio.onplay = () => setIsPlaying(true);
-                newAudio.onpause = () => setIsPlaying(false);
-                newAudio.onended = () => setIsPlaying(false);
-                setAudio(newAudio);
-            }
-        };
-
-        prefetchAudio();
-    }, [content]);
-  
-    const handleSpeak = async () => {
-      if (audio) {
-        if (isPlaying) {
-          audio.pause();
-          audio.currentTime = 0;
-        } else {
-          audio.play();
-        }
+  const handleSpeak = async () => {
+    if (audio) {
+      if (isPlaying) {
+        audio.pause();
+        audio.currentTime = 0;
+      } else {
+        audio.play();
       }
-    };
+      return;
+    }
+
+    if (typeof content !== 'string' || content.length === 0) return;
+
+    setIsGenerating(true);
+    const { media, error } = await speak(content);
+    setIsGenerating(false);
+
+    if (error) {
+        console.error('Error generating speech:', error);
+        return;
+    }
+
+    if (media) {
+        const newAudio = new Audio(media);
+        newAudio.onplay = () => setIsPlaying(true);
+        newAudio.onpause = () => setIsPlaying(false);
+        newAudio.onended = () => setIsPlaying(false);
+        setAudio(newAudio);
+        newAudio.play();
+    }
+  };
   
     return (
       <div className="flex items-start gap-3">
@@ -164,7 +160,7 @@ const AssistantMessage = ({ content }: { content: React.ReactNode | string }) =>
                   size="icon" 
                   variant="ghost" 
                   onClick={handleSpeak} 
-                  disabled={isGenerating || !audio}
+                  disabled={isGenerating}
                   className="h-7 w-7 absolute bottom-1 right-1"
                 >
                   {isGenerating ? <Loader className="h-4 w-4 animate-spin" /> : <Volume2 className="h-4 w-4" />}
