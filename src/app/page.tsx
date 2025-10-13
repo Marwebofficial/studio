@@ -4,7 +4,7 @@ import { useState, useTransition, useRef, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
-import { Bot, User, Send, Code, MessageSquarePlus, Paperclip, X } from 'lucide-react';
+import { Bot, User, Send, Code, MessageSquarePlus, Paperclip, X, Trash } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import Image from 'next/image';
 import { format } from 'date-fns';
@@ -16,6 +16,16 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import {
   Card,
   CardContent,
@@ -153,43 +163,36 @@ export default function Home() {
   const [isPending, startTransition] = useTransition();
   const scrollAreaViewportRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [chatToDelete, setChatToDelete] = useState<string | null>(null);
 
   const activeChat = chats.find((chat) => chat.id === activeChatId);
   const messages = activeChat?.messages ?? [];
 
   useEffect(() => {
-    // Load chats from localStorage on initial render
     const savedChats = localStorage.getItem('chats');
-    if (savedChats) {
-      try {
-        const parsedChats: Chat[] = JSON.parse(savedChats, (key, value) => {
-          if (key === 'createdAt') {
-            return new Date(value);
-          }
-          return value;
-        });
-        if (parsedChats.length > 0) {
-          setChats(parsedChats);
-          setActiveChatId(parsedChats[parsedChats.length - 1].id);
-        } else {
-          // If there are no chats, create a new one by default
-          handleNewChat();
-        }
-      } catch (e) {
-        console.error("Failed to parse chats from localStorage", e);
-        handleNewChat();
-      }
-    } else {
-      // If no chats are saved, create a new one by default
-      handleNewChat();
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    const loadedChats = savedChats ? JSON.parse(savedChats, (key, value) => {
+        if (key === 'createdAt') return new Date(value);
+        return value;
+    }) : [];
+
+    const newChat: Chat = {
+        id: crypto.randomUUID(),
+        messages: [],
+        createdAt: new Date(),
+    };
+
+    setChats([newChat, ...loadedChats]);
+    setActiveChatId(newChat.id);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
-    // Save chats to localStorage whenever they change
-    if (chats.length > 0) {
-      localStorage.setItem('chats', JSON.stringify(chats));
+    // Save chats to localStorage whenever they change, but don't save empty new chats
+    const chatsToSave = chats.filter(chat => chat.messages.length > 0);
+    if (chatsToSave.length > 0) {
+      localStorage.setItem('chats', JSON.stringify(chatsToSave));
+    } else {
+      localStorage.removeItem('chats');
     }
   }, [chats]);
   
@@ -199,7 +202,7 @@ export default function Home() {
       messages: [],
       createdAt: new Date(),
     };
-    setChats(prev => [...prev, newChat]);
+    setChats(prev => [newChat, ...prev]);
     setActiveChatId(newChat.id);
   };
 
@@ -212,18 +215,22 @@ export default function Home() {
 
   const handlePrompt = (prompt: string) => {
     let currentChatId = activeChatId;
-    if (!currentChatId) {
-      const newChat: Chat = {
-        id: crypto.randomUUID(),
-        messages: [],
-        createdAt: new Date(),
-      };
-      setChats(prev => [...prev, newChat]);
-      currentChatId = newChat.id;
-      setActiveChatId(currentChatId);
+    if (!currentChatId || (activeChat && activeChat.messages.length > 0)) {
+        handleNewChat();
+        // Since state updates are async, we can't get the new chat id immediately.
+        // We will rely on the `onSubmit` to handle chat creation if activeChatId is null.
+        // A better approach would be to get the new chat ID from handleNewChat.
+        // For now, we'll work with this limitation.
+        // Let's find the newest chat that is empty.
+        const newEmptyChat = chats.find(c => c.messages.length === 0);
+        currentChatId = newEmptyChat ? newEmptyChat.id : activeChatId;
     }
-    form.setValue('question', prompt);
-    form.handleSubmit((data) => onSubmit(data, currentChatId!))();
+
+    // A small timeout to allow state to update with the new chat
+    setTimeout(() => {
+        form.setValue('question', prompt);
+        form.handleSubmit((data) => onSubmit(data))();
+    }, 0);
   };
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -244,7 +251,18 @@ export default function Home() {
     }
   }
 
-  const onSubmit = (data: z.infer<typeof formSchema>, chatId: string) => {
+  const onSubmit = (data: z.infer<typeof formSchema>) => {
+    let chatId = activeChatId;
+    // If there is no active chat or the active chat has messages, create a new one.
+    if (!chatId || (activeChat && activeChat.messages.length > 0 && activeChat.messages.some(m=>m.role === 'user'))) {
+        const newChat: Chat = { id: crypto.randomUUID(), messages: [], createdAt: new Date() };
+        setChats(prev => [newChat, ...prev]);
+        chatId = newChat.id;
+        setActiveChatId(newChat.id);
+    }
+    
+    if (!chatId) return;
+
     const question = data.question;
     const currentImageDataUri = imageDataUri;
 
@@ -302,9 +320,25 @@ export default function Home() {
   };
 
   const getChatTitle = (chat: Chat) => {
+    if (chat.messages.length === 0) return 'New Chat';
     const firstUserMessage = chat.messages.find(m => m.role === 'user');
     return firstUserMessage?.content || 'New Chat';
   }
+  
+  const handleDeleteChat = (chatIdToDelete: string) => {
+    const newChats = chats.filter(chat => chat.id !== chatIdToDelete);
+    setChats(newChats);
+
+    if (activeChatId === chatIdToDelete) {
+        // If the active chat is deleted, set the new active chat to be the most recent one
+        // or create a new one if no chats are left.
+        if (newChats.length > 0) {
+            setActiveChatId(newChats[0].id);
+        } else {
+            handleNewChat();
+        }
+    }
+  };
 
   useEffect(() => {
     if (scrollAreaViewportRef.current) {
@@ -313,7 +347,7 @@ export default function Home() {
         behavior: 'smooth',
       });
     }
-  }, [messages]);
+  }, [messages, activeChatId]);
 
   return (
     <SidebarProvider>
@@ -328,15 +362,26 @@ export default function Home() {
                 <SidebarContent className="p-2">
                     <ScrollArea className="h-full">
                         <div className="flex flex-col gap-1 pr-2">
-                            {chats.slice().reverse().map(chat => (
-                                <Button
-                                    key={chat.id}
-                                    variant={activeChatId === chat.id ? 'secondary' : 'ghost'}
-                                    className="w-full justify-start h-8 text-sm truncate"
-                                    onClick={() => setActiveChatId(chat.id)}
-                                >
-                                    {getChatTitle(chat)}
-                                </Button>
+                            {chats.filter(c => c.messages.length > 0).map(chat => (
+                                <div key={chat.id} className="group relative">
+                                  <Button
+                                      variant={activeChatId === chat.id ? 'secondary' : 'ghost'}
+                                      className="w-full justify-start h-8 text-sm truncate pr-8"
+                                      onClick={() => setActiveChatId(chat.id)}
+                                  >
+                                      {getChatTitle(chat)}
+                                  </Button>
+                                  <div className="absolute right-0 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity">
+                                      <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        className="h-7 w-7"
+                                        onClick={() => setChatToDelete(chat.id)}
+                                      >
+                                        <Trash className="h-4 w-4" />
+                                      </Button>
+                                  </div>
+                                </div>
                             ))}
                         </div>
                     </ScrollArea>
@@ -392,14 +437,7 @@ export default function Home() {
                                 }
 
                                 if (message.role === 'assistant') {
-                                    // The loading message is shown when the last message is from the assistant and its content is empty.
-                                    const isLoading = index === messages.length - 1 && message.content === '' && isPending;
-                                    if (isLoading) {
-                                      return <LoadingMessage key={message.id} />;
-                                    }
-                                    if (message.content) {
-                                      return <AssistantMessage key={message.id} content={message.content} />;
-                                    }
+                                    return <AssistantMessage key={message.id} content={message.content} />;
                                 }
                                 if (message.role === 'error') {
                                     return <ErrorMessage key={message.id} content={message.content} />;
@@ -417,16 +455,7 @@ export default function Home() {
                     <div className="mx-auto max-w-3xl">
                     <Form {...form}>
                         <form
-                        onSubmit={form.handleSubmit((data) => {
-                            if (!activeChatId) {
-                                const newChat: Chat = { id: crypto.randomUUID(), messages: [], createdAt: new Date() };
-                                setChats(prev => [...prev, newChat]);
-                                setActiveChatId(newChat.id);
-                                onSubmit(data, newChat.id);
-                            } else {
-                                onSubmit(data, activeChatId);
-                            }
-                        })}
+                        onSubmit={form.handleSubmit((data) => onSubmit(data))}
                         className="relative"
                         >
                           <div className="relative">
@@ -477,6 +506,29 @@ export default function Home() {
                 </footer>
             </div>
         </div>
+        <AlertDialog open={!!chatToDelete} onOpenChange={(open) => !open && setChatToDelete(null)}>
+            <AlertDialogContent>
+                <AlertDialogHeader>
+                    <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+                    <AlertDialogDescription>
+                        This action cannot be undone. This will permanently delete this chat history.
+                    </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                    <AlertDialogCancel onClick={() => setChatToDelete(null)}>Cancel</AlertDialogCancel>
+                    <AlertDialogAction
+                        onClick={() => {
+                            if (chatToDelete) {
+                                handleDeleteChat(chatToDelete);
+                            }
+                            setChatToDelete(null);
+                        }}
+                    >
+                        Delete
+                    </AlertDialogAction>
+                </AlertDialogFooter>
+            </AlertDialogContent>
+        </AlertDialog>
     </SidebarProvider>
   );
 }
