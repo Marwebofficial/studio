@@ -4,6 +4,10 @@ import {
   generateAnswer,
   type GenerateAnswerInput,
 } from '@/ai/flows/generate-answer-from-web-search';
+import {
+    textToSpeech,
+    type TextToSpeechOutput,
+} from '@/ai/flows/text-to-speech';
 
 export async function getAnswer(
   question: string,
@@ -24,3 +28,17 @@ export async function getAnswer(
     };
   }
 }
+
+export async function speak(
+    text: string
+  ): Promise<{ media?: string; error?: string }> {
+    try {
+      const { media } = await textToSpeech(text);
+      return { media };
+    } catch (e: any) {
+      console.error(e);
+      return {
+        error: e.message || 'An error occurred during text-to-speech.',
+      };
+    }
+  }

@@ -4,14 +4,14 @@ import { useState, useRef, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
-import { Bot, User, Send, Code, MessageSquarePlus, Paperclip, X, Trash, FileText } from 'lucide-react';
+import { Bot, User, Send, Code, MessageSquarePlus, Paperclip, X, Trash, FileText, Loader, Volume2 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import Image from 'next/image';
 import { format } from 'date-fns';
 import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
 
-import { getAnswer } from '@/app/actions';
+import { getAnswer, speak } from '@/app/actions';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -107,22 +107,70 @@ const UserMessage = ({ content, fileDataUri, createdAt }: { content: string, fil
 }
   
 
-const AssistantMessage = ({ content }: { content: React.ReactNode | string }) => (
-    <div className="flex items-start gap-3">
-      <Avatar className="h-8 w-8 border-2 border-accent/50">
-        <AvatarFallback className="bg-transparent">
-          <Bot className="h-4 w-4 text-accent" />
-        </AvatarFallback>
-      </Avatar>
-      <div className="max-w-xl w-full space-y-4">
-        <div className="bg-accent/10 p-3 rounded-xl rounded-bl-none border border-accent/20">
-            <div className="prose prose-sm prose-invert max-w-none text-foreground">
-                {typeof content === 'string' ? <ReactMarkdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]}>{content}</ReactMarkdown> : content}
+const AssistantMessage = ({ content }: { content: React.ReactNode | string }) => {
+    const [audio, setAudio] = useState<HTMLAudioElement | null>(null);
+    const [isPlaying, setIsPlaying] = useState(false);
+    const [isGenerating, setIsGenerating] = useState(false);
+  
+    const handleSpeak = async () => {
+      if (typeof content !== 'string') return;
+      if (audio) {
+        if (isPlaying) {
+          audio.pause();
+          setIsPlaying(false);
+        } else {
+          audio.play();
+          setIsPlaying(true);
+        }
+        return;
+      }
+  
+      setIsGenerating(true);
+      const { media, error } = await speak(content);
+      setIsGenerating(false);
+  
+      if (error) {
+        // You might want to show a toast or an error message to the user
+        console.error('Error generating speech:', error);
+        return;
+      }
+  
+      if (media) {
+        const newAudio = new Audio(media);
+        newAudio.onplay = () => setIsPlaying(true);
+        newAudio.onpause = () => setIsPlaying(false);
+        newAudio.onended = () => setIsPlaying(false);
+        setAudio(newAudio);
+        newAudio.play();
+      }
+    };
+  
+    return (
+      <div className="flex items-start gap-3">
+        <Avatar className="h-8 w-8 border-2 border-accent/50">
+          <AvatarFallback className="bg-transparent">
+            <Bot className="h-4 w-4 text-accent" />
+          </AvatarFallback>
+        </Avatar>
+        <div className="max-w-xl w-full space-y-2">
+            <div className="bg-accent/10 p-3 rounded-xl rounded-bl-none border border-accent/20 group relative">
+                <div className="prose prose-sm prose-invert max-w-none text-foreground">
+                    {typeof content === 'string' ? <ReactMarkdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]}>{content}</ReactMarkdown> : content}
+                </div>
+                <Button 
+                  size="icon" 
+                  variant="ghost" 
+                  onClick={handleSpeak} 
+                  disabled={isGenerating}
+                  className="h-7 w-7 absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity"
+                >
+                  {isGenerating ? <Loader className="h-4 w-4 animate-spin" /> : <Volume2 className="h-4 w-4" />}
+                </Button>
             </div>
         </div>
       </div>
-    </div>
-  );
+    );
+  };
   
 const ErrorMessage = ({ content }: { content: string }) => (
     <div className="flex items-start gap-4">
