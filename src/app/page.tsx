@@ -50,6 +50,8 @@ import {
   SidebarTrigger,
 } from '@/components/ui/sidebar';
 
+const MAX_CHAT_HISTORY = 8;
+
 type Message = {
   id: string;
   role: 'user' | 'assistant' | 'error';
@@ -211,7 +213,13 @@ export default function Home() {
       messages: [],
       createdAt: new Date(),
     };
-    setChats(prev => [newChat, ...prev]);
+    setChats(prev => {
+        const updatedChats = [newChat, ...prev];
+        if (updatedChats.length > MAX_CHAT_HISTORY) {
+            return updatedChats.slice(0, MAX_CHAT_HISTORY);
+        }
+        return updatedChats;
+    });
     setActiveChatId(newChat.id);
   };
 
@@ -265,7 +273,13 @@ export default function Home() {
     // If there is no active chat or the active chat has messages, create a new one.
     if (!chatId || (activeChat && activeChat.messages.length > 0 && activeChat.messages.some(m=>m.role === 'user'))) {
         const newChat: Chat = { id: crypto.randomUUID(), messages: [], createdAt: new Date() };
-        setChats(prev => [newChat, ...prev]);
+        setChats(prev => {
+            const updatedChats = [newChat, ...prev];
+            if (updatedChats.length > MAX_CHAT_HISTORY) {
+                return updatedChats.slice(0, MAX_CHAT_HISTORY);
+            }
+            return updatedChats;
+        });
         chatId = newChat.id;
         setActiveChatId(newChat.id);
     }
