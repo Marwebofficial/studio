@@ -168,14 +168,22 @@ export default function Home() {
           }
           return value;
         });
-        setChats(parsedChats);
         if (parsedChats.length > 0) {
+          setChats(parsedChats);
           setActiveChatId(parsedChats[parsedChats.length - 1].id);
+        } else {
+          // If there are no chats, create a new one by default
+          handleNewChat();
         }
       } catch (e) {
         console.error("Failed to parse chats from localStorage", e);
+        handleNewChat();
       }
+    } else {
+      // If no chats are saved, create a new one by default
+      handleNewChat();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -255,23 +263,16 @@ export default function Home() {
     ));
 
     startTransition(async () => {
-      const assistantMessage: Message = { id: crypto.randomUUID(), role: 'assistant', content: '', createdAt: new Date() };
-      setChats(prev => prev.map(chat =>
-        chat.id === chatId
-          ? { ...chat, messages: [...chat.messages, assistantMessage] }
-          : chat
-      ));
-
       try {
         const answer = await getAnswer(question, currentImageDataUri);
+        
+        const assistantMessage: Message = { id: crypto.randomUUID(), role: 'assistant', content: answer, createdAt: new Date() };
         
         setChats(prev => prev.map(chat => {
           if (chat.id === chatId) {
             return {
               ...chat,
-              messages: chat.messages.map(msg => 
-                msg.id === assistantMessage.id ? { ...msg, content: answer } : msg
-              )
+              messages: [...chat.messages, assistantMessage]
             };
           }
           return chat;
@@ -283,13 +284,9 @@ export default function Home() {
 
         setChats(prev => prev.map(chat => {
           if (chat.id === chatId) {
-            // Replace the loading message with the error message
             return {
               ...chat,
-              messages: [
-                ...chat.messages.slice(0, -1),
-                errorMessage
-              ]
+              messages: [...chat.messages, errorMessage]
             }
           }
           return chat;
@@ -389,22 +386,27 @@ export default function Home() {
                             </div>
                         ) : (
                         <div className="space-y-6">
-                            {messages.map((message) => {
+                            {messages.map((message, index) => {
                                 if (message.role === 'user') {
                                     return <UserMessage key={message.id} content={message.content} imageDataUri={message.imageDataUri} createdAt={message.createdAt} />;
                                 }
 
                                 if (message.role === 'assistant') {
-                                    if (message.content === '') {
-                                        return <LoadingMessage key={message.id} />;
+                                    // The loading message is shown when the last message is from the assistant and its content is empty.
+                                    const isLoading = index === messages.length - 1 && message.content === '' && isPending;
+                                    if (isLoading) {
+                                      return <LoadingMessage key={message.id} />;
                                     }
-                                    return <AssistantMessage key={message.id} content={message.content} />;
+                                    if (message.content) {
+                                      return <AssistantMessage key={message.id} content={message.content} />;
+                                    }
                                 }
                                 if (message.role === 'error') {
                                     return <ErrorMessage key={message.id} content={message.content} />;
                                 }
                                 return null;
                             })}
+                            {isPending && <LoadingMessage />}
                         </div>
                         )}
                         </div>
@@ -478,3 +480,5 @@ export default function Home() {
     </SidebarProvider>
   );
 }
+
+    
