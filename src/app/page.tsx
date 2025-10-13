@@ -108,68 +108,68 @@ const UserMessage = ({ content, fileDataUri, createdAt }: { content: string, fil
   
 
 const AssistantMessage = ({ content }: { content: React.ReactNode | string }) => {
-  const [audio, setAudio] = useState<HTMLAudioElement | null>(null);
-  const [isPlaying, setIsPlaying] = useState(false);
-  const [isGenerating, setIsGenerating] = useState(false);
-
-  const handleSpeak = async () => {
-    if (audio) {
-      if (isPlaying) {
-        audio.pause();
-        audio.currentTime = 0;
-      } else {
-        audio.play();
-      }
-      return;
-    }
-
-    if (typeof content !== 'string' || content.length === 0) return;
-
-    setIsGenerating(true);
-    const { media, error } = await speak(content);
-    setIsGenerating(false);
-
-    if (error) {
-        console.error('Error generating speech:', error);
-        return;
-    }
-
-    if (media) {
-        const newAudio = new Audio(media);
-        newAudio.onplay = () => setIsPlaying(true);
-        newAudio.onpause = () => setIsPlaying(false);
-        newAudio.onended = () => setIsPlaying(false);
-        setAudio(newAudio);
-        newAudio.play();
-    }
-  };
+    const [audio, setAudio] = useState<HTMLAudioElement | null>(null);
+    const [isPlaying, setIsPlaying] = useState(false);
+    const [isGenerating, setIsGenerating] = useState(false);
   
-    return (
-      <div className="flex items-start gap-3">
-        <Avatar className="h-8 w-8 border-2 border-accent/50">
-          <AvatarFallback className="bg-transparent">
-            <Bot className="h-4 w-4 text-accent" />
-          </AvatarFallback>
-        </Avatar>
-        <div className="max-w-xl w-full space-y-2">
-            <div className="bg-accent/10 p-3 rounded-xl rounded-bl-none border border-accent/20 group relative">
-                <div className="prose prose-sm prose-invert max-w-none text-foreground pb-6">
-                    {typeof content === 'string' ? <ReactMarkdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]}>{content}</ReactMarkdown> : content}
-                </div>
-                <Button 
-                  size="icon" 
-                  variant="ghost" 
-                  onClick={handleSpeak} 
-                  disabled={isGenerating}
-                  className="h-7 w-7 absolute bottom-1 right-1"
-                >
-                  {isGenerating ? <Loader className="h-4 w-4 animate-spin" /> : <Volume2 className="h-4 w-4" />}
-                </Button>
-            </div>
+    const handleSpeak = async () => {
+      if (audio) {
+        if (isPlaying) {
+          audio.pause();
+          setIsPlaying(false);
+        } else {
+          audio.play();
+        }
+        return;
+      }
+  
+      if (typeof content !== 'string' || content.length === 0) return;
+  
+      setIsGenerating(true);
+      const { media, error } = await speak(content);
+      setIsGenerating(false);
+  
+      if (error) {
+          console.error('Error generating speech:', error);
+          return;
+      }
+  
+      if (media) {
+          const newAudio = new Audio(media);
+          newAudio.onplay = () => setIsPlaying(true);
+          newAudio.onpause = () => setIsPlaying(false);
+          newAudio.onended = () => setIsPlaying(false);
+          setAudio(newAudio);
+          newAudio.play();
+      }
+    };
+    
+      return (
+        <div className="flex items-start gap-3">
+          <Avatar className="h-8 w-8 border-2 border-accent/50">
+            <AvatarFallback className="bg-transparent">
+              <Bot className="h-4 w-4 text-accent" />
+            </AvatarFallback>
+          </Avatar>
+          <div className="max-w-xl w-full space-y-2">
+              <div className="bg-accent/10 p-3 rounded-xl rounded-bl-none border border-accent/20 group relative">
+                  <div className="prose prose-sm prose-invert max-w-none text-foreground pb-6">
+                      {typeof content === 'string' ? <ReactMarkdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]}>{content}</ReactMarkdown> : content}
+                  </div>
+                  <Button 
+                    size="icon" 
+                    variant="ghost" 
+                    onClick={handleSpeak} 
+                    disabled={isGenerating}
+                    className="h-7 w-7 absolute bottom-1 right-1"
+                  >
+                    {isGenerating ? <Loader className="h-4 w-4 animate-spin" /> : <Volume2 className="h-4 w-4" />}
+                  </Button>
+              </div>
+          </div>
         </div>
-      </div>
-    );
-  };
+      );
+    };
   
 const ErrorMessage = ({ content }: { content: string }) => (
     <div className="flex items-start gap-4">
@@ -471,7 +471,7 @@ export default function Home() {
                 
                 <main className="flex-1 overflow-hidden">
                     <ScrollArea className="h-full" viewportRef={scrollAreaViewportRef}>
-                        <div className="mx-auto max-w-3xl p-4 md:p-6">
+                        <div className="mx-auto max-w-3xl px-4 md:px-6">
                         {messages.length === 0 && !isPending ? (
                             <div className="flex flex-col items-center justify-center h-full min-h-[calc(100vh-14rem)]">
                                 <Card className="w-full max-w-2xl text-center shadow-none border-0 bg-transparent">
@@ -503,7 +503,7 @@ export default function Home() {
                                 </Card>
                             </div>
                         ) : (
-                        <div className="space-y-6">
+                        <div className="space-y-6 pt-6">
                             {messages.map((message) => {
                                 if (message.role === 'user') {
                                     return <UserMessage key={message.id} content={message.content as string} fileDataUri={message.fileDataUri} createdAt={message.createdAt} />;
