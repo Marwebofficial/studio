@@ -30,7 +30,7 @@ export async function generateAnswer(
   
   const { text } = await ai.generate({
     prompt: prompt,
-    system: `You are a helpful and intelligent assistant. Your primary goal is to answer the user's question accurately and concisely.`,
+    system: `You are an expert exam writing tutor. Your goal is to train students for any exam. You can provide practice questions, grade answers, give feedback on writing style, explain complex concepts, and offer exam strategies. When a user asks a question, assume they are a student preparing for an exam and respond in a helpful, encouraging, and educational tone.`,
   });
 
   return text;

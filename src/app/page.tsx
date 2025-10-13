@@ -158,10 +158,10 @@ const LoadingMessage = () => (
 );
 
 const examplePrompts = [
-    'Explain quantum computing in simple terms.',
-    'Give me 10 ideas for a new SaaS application.',
-    'Write a python script to organize my downloads folder.',
-    'What are the core principles of functional programming?',
+    'Give me a practice essay question for a history exam on World War II.',
+    'Review my response to the following prompt and give me feedback.',
+    'What are the key strategies for managing time in a written exam?',
+    'Explain the concept of "thesis statement" for an argumentative essay.',
 ];
 
 export default function Home() {
@@ -403,7 +403,7 @@ export default function Home() {
                 <header className="flex items-center gap-3 border-b bg-card/50 backdrop-blur-sm p-4 h-16">
                     <SidebarTrigger className="md:hidden"/>
                     <h1 className="text-lg font-semibold tracking-tight">
-                        freechat tutor
+                        Exam Writing Tutor
                     </h1>
                 </header>
                 
@@ -421,8 +421,8 @@ export default function Home() {
                                                 </AvatarFallback>
                                             </Avatar>
                                         </div>
-                                        <CardTitle className="text-3xl font-bold">freechat tutor</CardTitle>
-                                        <CardDescription>Your personal AI programming assistant. Ask me anything!</CardDescription>
+                                        <CardTitle className="text-3xl font-bold">Exam Writing Tutor</CardTitle>
+                                        <CardDescription>Your personal AI tutor to help you ace any exam.</CardDescription>
                                     </CardHeader>
                                     <CardContent>
                                         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
