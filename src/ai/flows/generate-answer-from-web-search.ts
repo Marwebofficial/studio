@@ -9,7 +9,7 @@
  */
 
 import {ai} from '@/ai/genkit';
-import {generate} from 'genkit/generate';
+import {generate} from 'genkit';
 import {z} from 'genkit';
 
 const GenerateAnswerInputSchema = z.object({
