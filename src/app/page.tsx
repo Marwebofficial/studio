@@ -4,8 +4,9 @@ import { useState, useTransition, useRef, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
-import { Bot, User, Send, ExternalLink, MessageSquarePlus, Code } from 'lucide-react';
+import { Bot, User, Send, Code, MessageSquarePlus, Paperclip, X } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
+import Image from 'next/image';
 
 import { getAnswer } from '@/app/actions';
 import { Button } from '@/components/ui/button';
@@ -19,7 +20,6 @@ import {
   CardHeader,
   CardTitle
 } from '@/components/ui/card';
-import { Separator } from '@/components/ui/separator';
 import {
   Form,
   FormControl,
@@ -37,35 +37,43 @@ import {
   SidebarTrigger,
 } from '@/components/ui/sidebar';
 
-export const __SOURCES_DELIMITER__ = '__SOURCES_DELIMITER__';
-
 type Message = {
   id: string;
   role: 'user' | 'assistant' | 'error';
   content: string;
-  sources?: string[];
+  imageDataUri?: string;
 };
 
 const formSchema = z.object({
   question: z.string().min(1, 'Please enter a question.'),
 });
 
-const UserMessage = ({ content }: { content: string }) => (
-  <div className="flex items-start gap-3 justify-end">
-    <div className="max-w-xl w-full space-y-2">
-      <div className="bg-primary/10 border border-primary/20 text-foreground p-3 rounded-xl rounded-br-none">
-        <p className="text-sm">{content}</p>
+const UserMessage = ({ content, imageDataUri }: { content: string, imageDataUri?: string }) => (
+    <div className="flex items-start gap-3 justify-end">
+      <div className="max-w-xl w-full space-y-2">
+        <div className="bg-primary/10 border border-primary/20 text-foreground p-3 rounded-xl rounded-br-none">
+          {imageDataUri && (
+            <Image 
+              src={imageDataUri} 
+              alt="User upload" 
+              width={200}
+              height={200}
+              className="rounded-lg mb-2 w-full"
+            />
+          )}
+          <p className="text-sm text-foreground">{content}</p>
+        </div>
       </div>
+      <Avatar className="h-8 w-8 border-2 border-primary/50">
+        <AvatarFallback className="bg-transparent">
+          <User className="h-4 w-4 text-primary" />
+        </AvatarFallback>
+      </Avatar>
     </div>
-    <Avatar className="h-8 w-8 border-2 border-primary/50">
-      <AvatarFallback className="bg-transparent">
-        <User className="h-4 w-4 text-primary" />
-      </AvatarFallback>
-    </Avatar>
-  </div>
-);
+  );
+  
 
-const AssistantMessage = ({ content, sources }: { content: string, sources?: string[] }) => (
+const AssistantMessage = ({ content }: { content: string }) => (
     <div className="flex items-start gap-3">
       <Avatar className="h-8 w-8 border-2 border-accent/50">
         <AvatarFallback className="bg-transparent">
@@ -77,28 +85,6 @@ const AssistantMessage = ({ content, sources }: { content: string, sources?: str
             <div className="prose prose-sm prose-invert max-w-none text-foreground">
                 <ReactMarkdown>{content}</ReactMarkdown>
             </div>
-            {sources && sources.length > 0 && (
-            <div>
-                <Separator className="my-4" />
-                <div className="space-y-2">
-                <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Sources</h3>
-                <div className="flex flex-wrap gap-2">
-                    {sources.map((source, index) => (
-                    <a
-                        key={index}
-                        href={source}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="flex items-center gap-1.5 rounded-full bg-muted/50 px-3 py-1 text-xs text-muted-foreground transition-colors hover:bg-muted"
-                    >
-                        <ExternalLink className="h-3 w-3" />
-                        {new URL(source).hostname}
-                    </a>
-                    ))}
-                </div>
-                </div>
-            </div>
-            )}
         </div>
       </div>
     </div>
@@ -149,8 +135,10 @@ const examplePrompts = [
 export default function Home() {
   const { toast } = useToast();
   const [messages, setMessages] = useState<Message[]>([]);
+  const [imageDataUri, setImageDataUri] = useState<string | undefined>();
   const [isPending, startTransition] = useTransition();
   const scrollAreaViewportRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
@@ -164,19 +152,43 @@ export default function Home() {
     form.handleSubmit(onSubmit)();
   };
 
+  const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = (loadEvent) => {
+        setImageDataUri(loadEvent.target?.result as string);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const removeImage = () => {
+    setImageDataUri(undefined);
+    if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+    }
+  }
+
   const onSubmit = (data: z.infer<typeof formSchema>) => {
     const question = data.question;
+    const currentImageDataUri = imageDataUri;
+
     form.reset();
+    setImageDataUri(undefined);
+    if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+    }
     
     setMessages((prev) => [
       ...prev,
-      { id: crypto.randomUUID(), role: 'user', content: question },
-      { id: crypto.randomUUID(), role: 'assistant', content: '' } // Add empty assistant message
+      { id: crypto.randomUUID(), role: 'user', content: question, imageDataUri: currentImageDataUri },
     ]);
 
     startTransition(async () => {
+      setMessages((prev) => [...prev, { id: crypto.randomUUID(), role: 'assistant', content: '' } ]);
       try {
-        const answer = await getAnswer(question);
+        const answer = await getAnswer(question, currentImageDataUri);
         
         setMessages((prev) =>
           prev.map((msg, i) =>
@@ -268,20 +280,14 @@ export default function Home() {
                         <div className="space-y-6">
                             {messages.map((message) => {
                                 if (message.role === 'user') {
-                                    return <UserMessage key={message.id} content={message.content} />;
+                                    return <UserMessage key={message.id} content={message.content} imageDataUri={message.imageDataUri} />;
                                 }
+
                                 if (message.role === 'assistant') {
-                                  // Don't render empty assistant messages
-                                  if (message.content === '') {
-                                    return <LoadingMessage key={message.id} />;
-                                  }
-                                  return (
-                                    <AssistantMessage
-                                      key={message.id}
-                                      content={message.content}
-                                      sources={message.sources}
-                                    />
-                                  );
+                                    if (message.content === '') {
+                                        return <LoadingMessage key={message.id} />;
+                                    }
+                                    return <AssistantMessage key={message.id} content={message.content} />;
                                 }
                                 if (message.role === 'error') {
                                     return <ErrorMessage key={message.id} content={message.content} />;
@@ -301,28 +307,45 @@ export default function Home() {
                         onSubmit={form.handleSubmit(onSubmit)}
                         className="relative"
                         >
-                        <FormField
-                            control={form.control}
-                            name="question"
-                            render={({ field }) => (
-                            <FormItem>
-                                <FormControl>
+                          <div className="relative">
+                            <FormControl>
                                 <Input
                                     placeholder="Ask me anything..."
                                     autoComplete="off"
                                     disabled={isPending}
-                                    {...field}
-                                    className="pr-12 h-12 bg-input rounded-full"
+                                    {...form.register('question')}
+                                    className="pr-20 pl-12 h-12 bg-input rounded-full"
                                 />
-                                </FormControl>
-                                <FormMessage />
+                            </FormControl>
+                            <Button type="button" size="icon" variant="ghost" className="absolute top-1/2 left-2 -translate-y-1/2 h-9 w-9 rounded-full" onClick={() => fileInputRef.current?.click()}>
+                                <Paperclip className="h-4 w-4" />
+                                <span className="sr-only">Attach image</span>
+                            </Button>
+                            <Button type="submit" size="icon" disabled={isPending} className="absolute top-1/2 right-2 -translate-y-1/2 h-9 w-9 rounded-full bg-accent hover:bg-accent/90">
+                                <Send className="h-4 w-4" />
+                                <span className="sr-only">Send</span>
+                            </Button>
+                          </div>
+                          {imageDataUri && (
+                            <div className="mt-4 relative w-24 h-24">
+                                <Image src={imageDataUri} alt="Preview" layout="fill" objectFit="cover" className="rounded-lg" />
+                                <Button type="button" size="icon" variant="destructive" className="absolute -top-2 -right-2 h-6 w-6 rounded-full" onClick={removeImage}>
+                                    <X className="h-4 w-4" />
+                                </Button>
+                            </div>
+                          )}
+
+                          <input type="file" accept="image/*" ref={fileInputRef} onChange={handleFileChange} className="hidden" />
+                          
+                          <FormField
+                            control={form.control}
+                            name="question"
+                            render={() => (
+                            <FormItem>
+                                <FormMessage className="mt-2" />
                             </FormItem>
                             )}
                         />
-                        <Button type="submit" size="icon" disabled={isPending} className="absolute top-1/2 right-2 -translate-y-1/2 h-9 w-9 rounded-full bg-accent hover:bg-accent/90">
-                            <Send className="h-4 w-4" />
-                            <span className="sr-only">Send</span>
-                        </Button>
                         </form>
                     </Form>
                     <p className="text-xs text-center text-muted-foreground mt-3">
@@ -335,5 +358,3 @@ export default function Home() {
     </SidebarProvider>
   );
 }
-
-    
