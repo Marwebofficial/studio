@@ -10,7 +10,7 @@ import {ai} from '@/ai/genkit';
 import {z} from 'genkit';
 import wav from 'wav';
 
-export const TextToSpeechOutputSchema = z.object({
+const TextToSpeechOutputSchema = z.object({
   media: z.string().describe('The base64 encoded audio data URI.'),
 });
 export type TextToSpeechOutput = z.infer<typeof TextToSpeechOutputSchema>;
@@ -74,7 +74,7 @@ const textToSpeechFlow = ai.defineFlow(
     );
     const wavBase64 = await toWav(audioBuffer);
     return {
-      media: 'data:audio/wav;base64,' + wavBase64,
+      media: 'data:audio/wav;base64,' + wavBase4,
     };
   }
 );
