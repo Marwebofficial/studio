@@ -7,18 +7,18 @@ import {
 import { z } from 'zod';
 
 const QuestionSchema = z.string().min(1, 'Question cannot be empty.');
-const ImageSchema = z.string().optional();
+const FileSchema = z.string().optional();
 
 export async function getAnswer(
   question: string,
-  imageDataUri?: string,
+  fileDataUri?: string,
 ): Promise<string> {
   const validatedQuestion = QuestionSchema.parse(question);
-  const validatedImage = ImageSchema.parse(imageDataUri);
+  const validatedFile = FileSchema.parse(fileDataUri);
 
   const input: GenerateAnswerInput = { question: validatedQuestion };
-  if (validatedImage) {
-    input.imageDataUri = validatedImage;
+  if (validatedFile) {
+    input.fileDataUri = validatedFile;
   }
   
   return generateAnswer(input);

@@ -4,7 +4,7 @@ import { useState, useTransition, useRef, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
-import { Bot, User, Send, Code, MessageSquarePlus, Paperclip, X, Trash } from 'lucide-react';
+import { Bot, User, Send, Code, MessageSquarePlus, Paperclip, X, Trash, FileText } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import Image from 'next/image';
 import { format } from 'date-fns';
@@ -54,7 +54,7 @@ type Message = {
   id: string;
   role: 'user' | 'assistant' | 'error';
   content: string;
-  imageDataUri?: string;
+  fileDataUri?: string;
   createdAt: Date;
 };
 
@@ -68,32 +68,41 @@ const formSchema = z.object({
   question: z.string().min(1, 'Please enter a question.'),
 });
 
-const UserMessage = ({ content, imageDataUri, createdAt }: { content: string, imageDataUri?: string, createdAt: Date }) => (
-    <div className="flex items-start gap-3 justify-end">
-      <div className="max-w-xl w-full space-y-2">
-        <div className="bg-primary/10 border border-primary/20 text-foreground p-3 rounded-xl rounded-br-none">
-          {imageDataUri && (
-            <Image 
-              src={imageDataUri} 
-              alt="User upload" 
-              width={200}
-              height={200}
-              className="rounded-lg mb-2 w-full"
-            />
-          )}
-          <p className="text-sm text-foreground">{content}</p>
+const UserMessage = ({ content, fileDataUri, createdAt }: { content: string, fileDataUri?: string, createdAt: Date }) => {
+    const isImage = fileDataUri?.startsWith('data:image');
+    return (
+        <div className="flex items-start gap-3 justify-end">
+          <div className="max-w-xl w-full space-y-2">
+            <div className="bg-primary/10 border border-primary/20 text-foreground p-3 rounded-xl rounded-br-none">
+              {fileDataUri && isImage && (
+                <Image 
+                  src={fileDataUri} 
+                  alt="User upload" 
+                  width={200}
+                  height={200}
+                  className="rounded-lg mb-2 w-full"
+                />
+              )}
+              {fileDataUri && !isImage && (
+                <div className="mb-2 flex items-center gap-2 text-sm text-foreground/80">
+                    <FileText className="h-4 w-4" />
+                    <span>Attached file</span>
+                </div>
+              )}
+              <p className="text-sm text-foreground">{content}</p>
+            </div>
+            <div className="text-xs text-muted-foreground text-right">
+                {format(createdAt, 'HH:mm')}
+            </div>
+          </div>
+          <Avatar className="h-8 w-8 border-2 border-primary/50">
+            <AvatarFallback className="bg-transparent">
+              <User className="h-4 w-4 text-primary" />
+            </AvatarFallback>
+          </Avatar>
         </div>
-        <div className="text-xs text-muted-foreground text-right">
-            {format(createdAt, 'HH:mm')}
-        </div>
-      </div>
-      <Avatar className="h-8 w-8 border-2 border-primary/50">
-        <AvatarFallback className="bg-transparent">
-          <User className="h-4 w-4 text-primary" />
-        </AvatarFallback>
-      </Avatar>
-    </div>
-  );
+      );
+}
   
 
 const AssistantMessage = ({ content }: { content: string }) => (
@@ -159,7 +168,7 @@ export default function Home() {
   const { toast } = useToast();
   const [chats, setChats] = useState<Chat[]>([]);
   const [activeChatId, setActiveChatId] = useState<string | null>(null);
-  const [imageDataUri, setImageDataUri] = useState<string | undefined>();
+  const [fileDataUri, setFileDataUri] = useState<string | undefined>();
   const [isPending, startTransition] = useTransition();
   const scrollAreaViewportRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -238,14 +247,14 @@ export default function Home() {
     if (file) {
       const reader = new FileReader();
       reader.onload = (loadEvent) => {
-        setImageDataUri(loadEvent.target?.result as string);
+        setFileDataUri(loadEvent.target?.result as string);
       };
       reader.readAsDataURL(file);
     }
   };
 
-  const removeImage = () => {
-    setImageDataUri(undefined);
+  const removeFile = () => {
+    setFileDataUri(undefined);
     if (fileInputRef.current) {
         fileInputRef.current.value = '';
     }
@@ -264,15 +273,15 @@ export default function Home() {
     if (!chatId) return;
 
     const question = data.question;
-    const currentImageDataUri = imageDataUri;
+    const currentFileDataUri = fileDataUri;
 
     form.reset();
-    setImageDataUri(undefined);
+    setFileDataUri(undefined);
     if (fileInputRef.current) {
         fileInputRef.current.value = '';
     }
     
-    const userMessage: Message = { id: crypto.randomUUID(), role: 'user', content: question, imageDataUri: currentImageDataUri, createdAt: new Date() };
+    const userMessage: Message = { id: crypto.randomUUID(), role: 'user', content: question, fileDataUri: currentFileDataUri, createdAt: new Date() };
 
     setChats(prev => prev.map(chat => 
       chat.id === chatId 
@@ -282,7 +291,7 @@ export default function Home() {
 
     startTransition(async () => {
       try {
-        const answer = await getAnswer(question, currentImageDataUri);
+        const answer = await getAnswer(question, currentFileDataUri);
         
         const assistantMessage: Message = { id: crypto.randomUUID(), role: 'assistant', content: answer, createdAt: new Date() };
         
@@ -348,6 +357,8 @@ export default function Home() {
       });
     }
   }, [messages, activeChatId]);
+  
+  const isImageFile = fileDataUri?.startsWith('data:image');
 
   return (
     <SidebarProvider>
@@ -433,7 +444,7 @@ export default function Home() {
                         <div className="space-y-6">
                             {messages.map((message, index) => {
                                 if (message.role === 'user') {
-                                    return <UserMessage key={message.id} content={message.content} imageDataUri={message.imageDataUri} createdAt={message.createdAt} />;
+                                    return <UserMessage key={message.id} content={message.content} fileDataUri={message.fileDataUri} createdAt={message.createdAt} />;
                                 }
 
                                 if (message.role === 'assistant') {
@@ -470,23 +481,29 @@ export default function Home() {
                             </FormControl>
                             <Button type="button" size="icon" variant="ghost" className="absolute top-1/2 left-2 -translate-y-1/2 h-9 w-9 rounded-full" onClick={() => fileInputRef.current?.click()}>
                                 <Paperclip className="h-4 w-4" />
-                                <span className="sr-only">Attach image</span>
+                                <span className="sr-only">Attach file</span>
                             </Button>
                             <Button type="submit" size="icon" disabled={isPending} className="absolute top-1/2 right-2 -translate-y-1/2 h-9 w-9 rounded-full bg-accent hover:bg-accent/90">
                                 <Send className="h-4 w-4" />
                                 <span className="sr-only">Send</span>
                             </Button>
                           </div>
-                          {imageDataUri && (
+                          {fileDataUri && (
                             <div className="mt-4 relative w-24 h-24">
-                                <Image src={imageDataUri} alt="Preview" layout="fill" objectFit="cover" className="rounded-lg" />
-                                <Button type="button" size="icon" variant="destructive" className="absolute -top-2 -right-2 h-6 w-6 rounded-full" onClick={removeImage}>
+                                {isImageFile ? (
+                                    <Image src={fileDataUri} alt="Preview" layout="fill" objectFit="cover" className="rounded-lg" />
+                                ) : (
+                                    <div className="w-full h-full bg-muted rounded-lg flex items-center justify-center">
+                                        <FileText className="w-10 h-10 text-muted-foreground" />
+                                    </div>
+                                )}
+                                <Button type="button" size="icon" variant="destructive" className="absolute -top-2 -right-2 h-6 w-6 rounded-full" onClick={removeFile}>
                                     <X className="h-4 w-4" />
                                 </Button>
                             </div>
                           )}
 
-                          <input type="file" accept="image/*" ref={fileInputRef} onChange={handleFileChange} className="hidden" />
+                          <input type="file" accept="image/*,text/plain,.md" ref={fileInputRef} onChange={handleFileChange} className="hidden" />
                           
                           <FormField
                             control={form.control}
@@ -532,5 +549,3 @@ export default function Home() {
     </SidebarProvider>
   );
 }
-
-    

@@ -13,7 +13,7 @@ import {z} from 'genkit';
 
 const GenerateAnswerInputSchema = z.object({
   question: z.string().describe('The question to answer.'),
-  imageDataUri: z.string().optional().describe("A base64 encoded data URI of an image."),
+  fileDataUri: z.string().optional().describe("A base64 encoded data URI of a file (image, text, etc.)."),
 });
 export type GenerateAnswerInput = z.infer<
   typeof GenerateAnswerInputSchema
@@ -23,8 +23,8 @@ export async function generateAnswer(
   input: GenerateAnswerInput
 ): Promise<string> {
   const prompt = [];
-  if (input.imageDataUri) {
-    prompt.push({ media: { url: input.imageDataUri } });
+  if (input.fileDataUri) {
+    prompt.push({ media: { url: input.fileDataUri } });
   }
   prompt.push({ text: input.question });
   
