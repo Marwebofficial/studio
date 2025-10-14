@@ -4,7 +4,7 @@ import { useState, useRef, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
-import { Bot, User, Send, Code, MessageSquarePlus, Paperclip, X, Trash, FileText, Loader, Volume2 } from 'lucide-react';
+import { Bot, User, Send, Code, MessageSquarePlus, Paperclip, X, Trash, FileText, Loader, Volume2, BookCopy, PlusCircle } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import Image from 'next/image';
 import { format } from 'date-fns';
@@ -14,8 +14,19 @@ import rehypeKatex from 'rehype-katex';
 import { getAnswer, speak } from '@/app/actions';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
+import { Label } from '@/components/ui/label';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+  DialogClose,
+} from '@/components/ui/dialog';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -38,6 +49,7 @@ import {
   FormControl,
   FormField,
   FormItem,
+  FormLabel,
   FormMessage,
 } from '@/components/ui/form';
 import { useToast } from '@/hooks/use-toast';
@@ -54,7 +66,7 @@ const MAX_CHAT_HISTORY = 8;
 
 type Message = {
   id: string;
-  role: 'user' | 'assistant' | 'error';
+  role: 'user' | 'assistant' | 'error' | 'system';
   content: string | React.ReactNode;
   fileDataUri?: string;
   createdAt: Date;
@@ -66,9 +78,24 @@ type Chat = {
   createdAt: Date;
 };
 
+type StudentProgram = {
+    id: string;
+    title: string;
+    content?: string;
+    fileDataUri?: string;
+    fileName?: string;
+    createdAt: Date;
+};
+
 const formSchema = z.object({
   question: z.string().min(1, 'Please enter a question.'),
 });
+
+const settingsFormSchema = z.object({
+    title: z.string().min(1, 'Please enter a title.'),
+    content: z.string().optional(),
+});
+
 
 const UserMessage = ({ content, fileDataUri, createdAt }: { content: string, fileDataUri?: string, createdAt: Date }) => {
     const isImage = fileDataUri?.startsWith('data:image');
@@ -116,9 +143,8 @@ const AssistantMessage = ({ content }: { content: React.ReactNode | string }) =>
       if (audio) {
         if (isPlaying) {
           audio.pause();
-          setIsPlaying(false);
         } else {
-          audio.play();
+          await audio.play();
         }
         return;
       }
@@ -130,17 +156,17 @@ const AssistantMessage = ({ content }: { content: React.ReactNode | string }) =>
       setIsGenerating(false);
   
       if (error) {
-          console.error('Error generating speech:', error);
-          return;
+        console.error('Error generating speech:', error);
+        return;
       }
   
       if (media) {
-          const newAudio = new Audio(media);
-          newAudio.onplay = () => setIsPlaying(true);
-          newAudio.onpause = () => setIsPlaying(false);
-          newAudio.onended = () => setIsPlaying(false);
-          setAudio(newAudio);
-          newAudio.play();
+        const newAudio = new Audio(media);
+        newAudio.onplay = () => setIsPlaying(true);
+        newAudio.onpause = () => setIsPlaying(false);
+        newAudio.onended = () => setIsPlaying(false);
+        setAudio(newAudio);
+        await newAudio.play();
       }
     };
     
@@ -170,6 +196,53 @@ const AssistantMessage = ({ content }: { content: React.ReactNode | string }) =>
         </div>
       );
     };
+  
+const StudentProgramMessage = ({ programs }: { programs: StudentProgram[] }) => {
+    return (
+        <div className="flex items-start gap-3">
+            <Avatar className="h-8 w-8 border-2 border-accent/50">
+                <AvatarFallback className="bg-transparent">
+                    <BookCopy className="h-4 w-4 text-accent" />
+                </AvatarFallback>
+            </Avatar>
+            <div className="max-w-xl w-full space-y-2">
+                <div className="bg-accent/10 p-3 rounded-xl rounded-bl-none border border-accent/20">
+                    <div className="prose prose-sm prose-invert max-w-none text-foreground">
+                        <h3 className="text-foreground">Student Program Entries</h3>
+                        {programs.length > 0 ? (
+                            <ul className="space-y-4">
+                                {programs.map(program => (
+                                    <li key={program.id} className="not-prose">
+                                        <Card className="bg-background/50">
+                                            <CardHeader>
+                                                <CardTitle className="text-base">{program.title}</CardTitle>
+                                            </CardHeader>
+                                            <CardContent>
+                                                {program.content && <p className="text-sm">{program.content}</p>}
+                                                {program.fileDataUri && (
+                                                    program.fileDataUri.startsWith('data:image') ? (
+                                                        <Image src={program.fileDataUri} alt={program.title} width={200} height={200} className="rounded-md mt-2" />
+                                                    ) : (
+                                                        <div className="mt-2 flex items-center gap-2 text-sm text-foreground/80">
+                                                            <FileText className="h-4 w-4" />
+                                                            <span>{program.fileName || 'Attached file'}</span>
+                                                        </div>
+                                                    )
+                                                )}
+                                            </CardContent>
+                                        </Card>
+                                    </li>
+                                ))}
+                            </ul>
+                        ) : (
+                            <p>No student program settings have been saved yet. Use the `studentprogramsetting` command to add one.</p>
+                        )}
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+};
   
 const ErrorMessage = ({ content }: { content: string }) => (
     <div className="flex items-start gap-4">
@@ -218,20 +291,33 @@ export default function Home() {
   const [chats, setChats] = useState<Chat[]>([]);
   const [activeChatId, setActiveChatId] = useState<string | null>(null);
   const [fileDataUri, setFileDataUri] = useState<string | undefined>();
+  const [fileName, setFileName] = useState<string | undefined>();
   const [isPending, setIsPending] = useState(false);
   const scrollAreaViewportRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const settingsFileInputRef = useRef<HTMLInputElement>(null);
   const [chatToDelete, setChatToDelete] = useState<string | null>(null);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [studentPrograms, setStudentPrograms] = useState<StudentProgram[]>([]);
 
   const activeChat = chats.find((chat) => chat.id === activeChatId);
   const messages = activeChat?.messages ?? [];
 
   useEffect(() => {
+    // Load chats
     const savedChats = localStorage.getItem('chats');
     const loadedChats = savedChats ? JSON.parse(savedChats, (key, value) => {
         if (key === 'createdAt') return new Date(value);
         return value;
     }) : [];
+
+    // Load student programs
+    const savedPrograms = localStorage.getItem('studentPrograms');
+    const loadedPrograms = savedPrograms ? JSON.parse(savedPrograms, (key, value) => {
+        if (key === 'createdAt') return new Date(value);
+        return value;
+    }) : [];
+    setStudentPrograms(loadedPrograms);
 
     const newChat: Chat = {
         id: crypto.randomUUID(),
@@ -253,6 +339,10 @@ export default function Home() {
       localStorage.removeItem('chats');
     }
   }, [chats]);
+
+  useEffect(() => {
+    localStorage.setItem('studentPrograms', JSON.stringify(studentPrograms));
+  }, [studentPrograms]);
   
   const handleNewChat = () => {
     const newChat: Chat = {
@@ -277,6 +367,14 @@ export default function Home() {
     },
   });
 
+  const settingsForm = useForm<z.infer<typeof settingsFormSchema>>({
+    resolver: zodResolver(settingsFormSchema),
+    defaultValues: {
+        title: '',
+        content: '',
+    },
+  });
+
   const handlePrompt = (prompt: string) => {
     let currentChatId = activeChatId;
     if (!currentChatId || (activeChat && activeChat.messages.length > 0)) {
@@ -291,25 +389,82 @@ export default function Home() {
     }, 0);
   };
 
-  const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>, isSettings: boolean = false) => {
     const file = event.target.files?.[0];
     if (file) {
       const reader = new FileReader();
       reader.onload = (loadEvent) => {
         setFileDataUri(loadEvent.target?.result as string);
+        setFileName(file.name);
       };
       reader.readAsDataURL(file);
     }
   };
 
-  const removeFile = () => {
+  const removeFile = (isSettings: boolean = false) => {
     setFileDataUri(undefined);
-    if (fileInputRef.current) {
-        fileInputRef.current.value = '';
+    setFileName(undefined);
+    const inputRef = isSettings ? settingsFileInputRef : fileInputRef;
+    if (inputRef.current) {
+        inputRef.current.value = '';
     }
   }
 
+  const handleSaveSettings = async (data: z.infer<typeof settingsFormSchema>) => {
+    if (!data.content && !fileDataUri) {
+        settingsForm.setError('content', {
+            type: 'manual',
+            message: 'Please either provide content or upload a file.',
+        });
+        return;
+    }
+
+    const newProgram: StudentProgram = {
+        id: crypto.randomUUID(),
+        title: data.title,
+        content: data.content,
+        fileDataUri: fileDataUri,
+        fileName: fileName,
+        createdAt: new Date(),
+    };
+
+    setStudentPrograms(prev => [newProgram, ...prev]);
+    toast({
+        title: 'Settings Saved',
+        description: `The program "${data.title}" has been saved.`,
+    });
+    
+    // Reset and close
+    settingsForm.reset();
+    removeFile(true);
+    setIsSettingsOpen(false);
+  };
+
   const onSubmit = async (data: z.infer<typeof formSchema>) => {
+    const question = data.question;
+
+    if (question.trim().toLowerCase() === 'studentprogramsetting') {
+        setIsSettingsOpen(true);
+        form.reset();
+        return;
+    }
+
+    if (question.trim().toLowerCase() === 'studentprogram') {
+        const systemMessage: Message = { 
+            id: crypto.randomUUID(), 
+            role: 'system', 
+            content: <StudentProgramMessage programs={studentPrograms} />, 
+            createdAt: new Date() 
+        };
+
+        const chatId = activeChatId || chats[0].id;
+        setChats(prev => prev.map(chat =>
+            chat.id === chatId ? { ...chat, messages: [...chat.messages, systemMessage] } : chat
+        ));
+        form.reset();
+        return;
+    }
+
     let chatId = activeChatId;
     if (!chatId || (activeChat && activeChat.messages.length > 0 && activeChat.messages.some(m=>m.role === 'user'))) {
         const newChat: Chat = { id: crypto.randomUUID(), messages: [], createdAt: new Date() };
@@ -326,7 +481,6 @@ export default function Home() {
     
     if (!chatId) return;
 
-    const question = data.question;
     const currentFileDataUri = fileDataUri;
 
     form.reset();
@@ -515,6 +669,9 @@ export default function Home() {
                                 if (message.role === 'error') {
                                     return <ErrorMessage key={message.id} content={message.content as string} />;
                                 }
+                                if (message.role === 'system') {
+                                    return message.content;
+                                }
                                 return null;
                             })}
                             {isPending && <LoadingMessage />}
@@ -550,7 +707,7 @@ export default function Home() {
                                 <span className="sr-only">Send</span>
                             </Button>
                           </div>
-                          {fileDataUri && (
+                          {fileDataUri && !isSettingsOpen && (
                             <div className="mt-4 relative w-24 h-24">
                                 {isImageFile ? (
                                     <Image src={fileDataUri} alt="Preview" fill objectFit="cover" className="rounded-lg" />
@@ -559,13 +716,13 @@ export default function Home() {
                                         <FileText className="w-10 h-10 text-muted-foreground" />
                                     </div>
                                 )}
-                                <Button type="button" size="icon" variant="destructive" className="absolute -top-2 -right-2 h-6 w-6 rounded-full" onClick={removeFile}>
+                                <Button type="button" size="icon" variant="destructive" className="absolute -top-2 -right-2 h-6 w-6 rounded-full" onClick={() => removeFile()}>
                                     <X className="h-4 w-4" />
                                 </Button>
                             </div>
                           )}
 
-                          <input type="file" accept="image/*,text/plain,.md" ref={fileInputRef} onChange={handleFileChange} className="hidden" />
+                          <input type="file" accept="image/*,text/plain,.md" ref={fileInputRef} onChange={(e) => handleFileChange(e)} className="hidden" />
                           
                           <FormField
                             control={form.control}
@@ -608,6 +765,77 @@ export default function Home() {
                 </AlertDialogFooter>
             </AlertDialogContent>
         </AlertDialog>
+        <Dialog open={isSettingsOpen} onOpenChange={setIsSettingsOpen}>
+            <DialogContent className="sm:max-w-[425px]">
+                <Form {...settingsForm}>
+                    <form onSubmit={settingsForm.handleSubmit(handleSaveSettings)}>
+                        <DialogHeader>
+                            <DialogTitle>Student Program Settings</DialogTitle>
+                            <DialogDescription>
+                                Add a new program setting. Provide a title and either type content or upload a file.
+                            </DialogDescription>
+                        </DialogHeader>
+                        <div className="grid gap-4 py-4">
+                            <FormField
+                                control={settingsForm.control}
+                                name="title"
+                                render={({ field }) => (
+                                    <FormItem>
+                                        <FormLabel>Title</FormLabel>
+                                        <FormControl>
+                                            <Input placeholder="e.g., Week 1 Reading" {...field} />
+                                        </FormControl>
+                                        <FormMessage />
+                                    </FormItem>
+                                )}
+                            />
+                            <FormField
+                                control={settingsForm.control}
+                                name="content"
+                                render={({ field }) => (
+                                    <FormItem>
+                                        <FormLabel>Content</FormLabel>
+                                        <FormControl>
+                                            <Textarea placeholder="Type your content here..." className="resize-none" {...field} />
+                                        </FormControl>
+                                        <FormMessage />
+                                    </FormItem>
+                                )}
+                            />
+                             <div className="space-y-2">
+                                <Label>Or Upload a File</Label>
+                                {fileDataUri ? (
+                                    <div className="relative w-24 h-24">
+                                        {isImageFile ? (
+                                            <Image src={fileDataUri} alt="Preview" fill objectFit="cover" className="rounded-lg" />
+                                        ) : (
+                                            <div className="w-full h-full bg-muted rounded-lg flex items-center justify-center">
+                                                <FileText className="w-10 h-10 text-muted-foreground" />
+                                            </div>
+                                        )}
+                                        <Button type="button" size="icon" variant="destructive" className="absolute -top-2 -right-2 h-6 w-6 rounded-full" onClick={() => removeFile(true)}>
+                                            <X className="h-4 w-4" />
+                                        </Button>
+                                    </div>
+                                ) : (
+                                    <Button type="button" variant="outline" onClick={() => settingsFileInputRef.current?.click()}>
+                                        <Paperclip className="mr-2 h-4 w-4" />
+                                        Attach File
+                                    </Button>
+                                )}
+                                <input type="file" accept="image/*,text/plain,.md,.pdf,.doc,.docx" ref={settingsFileInputRef} onChange={(e) => handleFileChange(e, true)} className="hidden" />
+                            </div>
+                        </div>
+                        <DialogFooter>
+                            <DialogClose asChild>
+                                <Button type="button" variant="secondary">Cancel</Button>
+                            </DialogClose>
+                            <Button type="submit">Save</Button>
+                        </DialogFooter>
+                    </form>
+                </Form>
+            </DialogContent>
+        </Dialog>
     </SidebarProvider>
   );
 }
