@@ -4,7 +4,7 @@ import { useState, useRef, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
-import { Bot, User, Send, Code, MessageSquarePlus, Paperclip, X, Trash, FileText, Loader, Volume2, BookCopy, PlusCircle } from 'lucide-react';
+import { Bot, User, Send, GraduationCap, MessageSquarePlus, Paperclip, X, Trash, FileText, Loader, Volume2, BookCopy, PlusCircle, Edit } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import Image from 'next/image';
 import { format } from 'date-fns';
@@ -140,34 +140,34 @@ const AssistantMessage = ({ content }: { content: React.ReactNode | string }) =>
     const [isGenerating, setIsGenerating] = useState(false);
   
     const handleSpeak = async () => {
-      if (audio) {
-        if (isPlaying) {
-          audio.pause();
-        } else {
-          await audio.play();
+        if (audio) {
+            if (isPlaying) {
+                audio.pause();
+            } else {
+                await audio.play();
+            }
+            return;
         }
-        return;
-      }
-  
-      if (typeof content !== 'string' || content.length === 0) return;
-  
-      setIsGenerating(true);
-      const { media, error } = await speak(content);
-      setIsGenerating(false);
-  
-      if (error) {
-        console.error('Error generating speech:', error);
-        return;
-      }
-  
-      if (media) {
-        const newAudio = new Audio(media);
-        newAudio.onplay = () => setIsPlaying(true);
-        newAudio.onpause = () => setIsPlaying(false);
-        newAudio.onended = () => setIsPlaying(false);
-        setAudio(newAudio);
-        await newAudio.play();
-      }
+
+        if (typeof content !== 'string' || content.length === 0) return;
+
+        setIsGenerating(true);
+        const { media, error } = await speak(content);
+        setIsGenerating(false);
+
+        if (error) {
+            console.error('Error generating speech:', error);
+            return;
+        }
+
+        if (media) {
+            const newAudio = new Audio(media);
+            newAudio.onplay = () => setIsPlaying(true);
+            newAudio.onpause = () => setIsPlaying(false);
+            newAudio.onended = () => setIsPlaying(false);
+            setAudio(newAudio);
+            await newAudio.play();
+        }
     };
     
       return (
@@ -298,6 +298,9 @@ export default function Home() {
   const settingsFileInputRef = useRef<HTMLInputElement>(null);
   const [chatToDelete, setChatToDelete] = useState<string | null>(null);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [isEditProgramOpen, setIsEditProgramOpen] = useState(false);
+  const [programToEdit, setProgramToEdit] = useState<StudentProgram | null>(null);
+  const [programToDelete, setProgramToDelete] = useState<string | null>(null);
   const [studentPrograms, setStudentPrograms] = useState<StudentProgram[]>([]);
 
   const activeChat = chats.find((chat) => chat.id === activeChatId);
@@ -419,37 +422,86 @@ export default function Home() {
         return;
     }
 
-    const newProgram: StudentProgram = {
-        id: crypto.randomUUID(),
-        title: data.title,
-        content: data.content,
-        fileDataUri: fileDataUri,
-        fileName: fileName,
-        createdAt: new Date(),
-    };
+    if (programToEdit) {
+        // Editing existing program
+        const updatedProgram: StudentProgram = {
+            ...programToEdit,
+            title: data.title,
+            content: data.content,
+            fileDataUri: fileDataUri,
+            fileName: fileName,
+        };
+        setStudentPrograms(prev => prev.map(p => p.id === programToEdit.id ? updatedProgram : p));
+        toast({
+            title: 'Settings Updated',
+            description: `The program "${data.title}" has been updated.`,
+        });
 
-    setStudentPrograms(prev => [newProgram, ...prev]);
-    toast({
-        title: 'Settings Saved',
-        description: `The program "${data.title}" has been saved.`,
-    });
+    } else {
+        // Adding new program
+        const newProgram: StudentProgram = {
+            id: crypto.randomUUID(),
+            title: data.title,
+            content: data.content,
+            fileDataUri: fileDataUri,
+            fileName: fileName,
+            createdAt: new Date(),
+        };
+
+        setStudentPrograms(prev => [newProgram, ...prev]);
+        toast({
+            title: 'Settings Saved',
+            description: `The program "${data.title}" has been saved.`,
+        });
+    }
     
     // Reset and close
     settingsForm.reset();
     removeFile(true);
     setIsSettingsOpen(false);
+    setProgramToEdit(null);
+  };
+
+  const handleEditProgram = (program: StudentProgram) => {
+    setProgramToEdit(program);
+    settingsForm.setValue('title', program.title);
+    settingsForm.setValue('content', program.content || '');
+    if (program.fileDataUri) {
+        setFileDataUri(program.fileDataUri);
+        setFileName(program.fileName);
+    }
+    setIsEditProgramOpen(false);
+    setIsSettingsOpen(true);
+  };
+
+  const handleDeleteProgram = (programId: string) => {
+    setStudentPrograms(prev => prev.filter(p => p.id !== programId));
+    toast({
+        title: 'Program Deleted',
+        description: 'The program entry has been deleted.',
+    });
   };
 
   const onSubmit = async (data: z.infer<typeof formSchema>) => {
     const question = data.question;
+    const command = question.trim().toLowerCase();
 
-    if (question.trim().toLowerCase() === 'studentprogramsetting') {
+    if (command === 'studentprogramsetting') {
+        setProgramToEdit(null);
+        settingsForm.reset();
+        removeFile(true);
         setIsSettingsOpen(true);
         form.reset();
         return;
     }
 
-    if (question.trim().toLowerCase() === 'studentprogram') {
+    if (command === 'editstudentprogram') {
+        setIsEditProgramOpen(true);
+        form.reset();
+        return;
+    }
+
+    if (command === 'studentprogram') {
         const systemMessage: Message = { 
             id: crypto.randomUUID(), 
             role: 'system', 
@@ -633,7 +685,7 @@ export default function Home() {
                                         <div className="flex justify-center">
                                             <Avatar className="h-16 w-16 border-2 border-accent/20 bg-transparent">
                                                 <AvatarFallback className="bg-transparent">
-                                                    <Code className="h-8 w-8 text-accent" />
+                                                    <GraduationCap className="h-8 w-8 text-accent" />
                                                 </AvatarFallback>
                                             </Avatar>
                                         </div>
@@ -765,14 +817,21 @@ export default function Home() {
                 </AlertDialogFooter>
             </AlertDialogContent>
         </AlertDialog>
-        <Dialog open={isSettingsOpen} onOpenChange={setIsSettingsOpen}>
+        <Dialog open={isSettingsOpen} onOpenChange={(open) => {
+            if (!open) {
+                setProgramToEdit(null);
+                settingsForm.reset();
+                removeFile(true);
+            }
+            setIsSettingsOpen(open);
+        }}>
             <DialogContent className="sm:max-w-[425px]">
                 <Form {...settingsForm}>
                     <form onSubmit={settingsForm.handleSubmit(handleSaveSettings)}>
                         <DialogHeader>
-                            <DialogTitle>Student Program Settings</DialogTitle>
+                            <DialogTitle>{programToEdit ? 'Edit' : 'Student Program'} Settings</DialogTitle>
                             <DialogDescription>
-                                Add a new program setting. Provide a title and either type content or upload a file.
+                                {programToEdit ? 'Edit the' : 'Add a new'} program setting. Provide a title and either type content or upload a file.
                             </DialogDescription>
                         </DialogHeader>
                         <div className="grid gap-4 py-4">
@@ -836,6 +895,63 @@ export default function Home() {
                 </Form>
             </DialogContent>
         </Dialog>
+        <Dialog open={isEditProgramOpen} onOpenChange={setIsEditProgramOpen}>
+            <DialogContent className="sm:max-w-lg">
+                <DialogHeader>
+                    <DialogTitle>Edit Student Program</DialogTitle>
+                    <DialogDescription>
+                        Select a program entry to edit or delete it.
+                    </DialogDescription>
+                </DialogHeader>
+                <ScrollArea className="max-h-[60vh]">
+                    <div className="space-y-4 pr-6">
+                        {studentPrograms.length > 0 ? studentPrograms.map(program => (
+                             <Card key={program.id} className="flex items-center justify-between p-4">
+                                <div>
+                                    <p className="font-semibold">{program.title}</p>
+                                    <p className="text-sm text-muted-foreground">{program.content?.substring(0, 30) || program.fileName}{'...'}</p>
+                                </div>
+                                <div className="flex gap-2">
+                                    <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => handleEditProgram(program)}>
+                                        <Edit className="h-4 w-4" />
+                                    </Button>
+                                    <Button variant="destructive" size="icon" className="h-8 w-8" onClick={() => setProgramToDelete(program.id)}>
+                                        <Trash className="h-4 w-4" />
+                                    </Button>
+                                </div>
+                            </Card>
+                        )) : (
+                            <p className="text-center text-muted-foreground py-8">No program entries found.</p>
+                        )}
+                    </div>
+                </ScrollArea>
+            </DialogContent>
+        </Dialog>
+         <AlertDialog open={!!programToDelete} onOpenChange={(open) => !open && setProgramToDelete(null)}>
+            <AlertDialogContent>
+                <AlertDialogHeader>
+                    <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+                    <AlertDialogDescription>
+                        This action cannot be undone. This will permanently delete this program entry.
+                    </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                    <AlertDialogCancel onClick={() => setProgramToDelete(null)}>Cancel</AlertDialogCancel>
+                    <AlertDialogAction
+                        onClick={() => {
+                            if (programToDelete) {
+                                handleDeleteProgram(programToDelete);
+                            }
+                            setProgramToDelete(null);
+                        }}
+                    >
+                        Delete
+                    </AlertDialogAction>
+                </AlertDialogFooter>
+            </AlertDialogContent>
+        </AlertDialog>
     </SidebarProvider>
   );
 }
+
+    
