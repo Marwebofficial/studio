@@ -152,9 +152,7 @@ const AssistantMessage = ({ content }: { content: React.ReactNode | string }) =>
         if (typeof content !== 'string' || content.length === 0) return;
 
         setIsGenerating(true);
-        // Remove LaTeX for cleaner speech
-        const textForSpeech = content.replace(/\$\$|\\\(|\\\)/g, '');
-        const { media, error } = await speak(textForSpeech);
+        const { media, error } = await speak(content);
         setIsGenerating(false);
 
         if (error) {
@@ -955,5 +953,7 @@ export default function Home() {
     </SidebarProvider>
   );
 }
+
+    
 
     
