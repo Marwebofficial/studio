@@ -325,14 +325,18 @@ export default function Home() {
     }) : [];
     setStudentPrograms(loadedPrograms);
 
-    const newChat: Chat = {
-        id: crypto.randomUUID(),
-        messages: [],
-        createdAt: new Date(),
-    };
-
-    setChats([newChat, ...loadedChats]);
-    setActiveChatId(newChat.id);
+    if (loadedChats.length > 0) {
+        setChats(loadedChats);
+        setActiveChatId(loadedChats[0].id);
+    } else {
+        const newChat: Chat = {
+            id: crypto.randomUUID(),
+            messages: [],
+            createdAt: new Date(),
+        };
+        setChats([newChat]);
+        setActiveChatId(newChat.id);
+    }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -382,17 +386,19 @@ export default function Home() {
   });
 
   const handlePrompt = (prompt: string) => {
-    let currentChatId = activeChatId;
-    if (!currentChatId || (activeChat && activeChat.messages.length > 0)) {
-        handleNewChat();
-        const newEmptyChat = chats.find(c => c.messages.length === 0);
-        currentChatId = newEmptyChat ? newEmptyChat.id : activeChatId;
-    }
-
-    setTimeout(() => {
+    // If the current chat is not empty, start a new one for the prompt
+    if (activeChat && activeChat.messages.length > 0) {
+      handleNewChat();
+      // We need to wait for the state to update to get the new activeChatId
+      // A timeout works for this purpose.
+      setTimeout(() => {
         form.setValue('question', prompt);
-        form.handleSubmit((data) => onSubmit(data))();
-    }, 0);
+        form.handleSubmit((data) => onSubmit(data, true))();
+      }, 0);
+    } else {
+      form.setValue('question', prompt);
+      form.handleSubmit((data) => onSubmit(data))();
+    }
   };
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>, isSettings: boolean = false) => {
@@ -485,7 +491,7 @@ export default function Home() {
     });
   };
 
-  const onSubmit = async (data: z.infer<typeof formSchema>) => {
+  const onSubmit = async (data: z.infer<typeof formSchema>, forceNewChat: boolean = false) => {
     const question = data.question;
     const command = question.trim().toLowerCase();
 
@@ -521,20 +527,26 @@ export default function Home() {
     }
 
     let chatId = activeChatId;
-    if (!chatId || (activeChat && activeChat.messages.length > 0 && activeChat.messages.some(m=>m.role === 'user'))) {
-        const newChat: Chat = { id: crypto.randomUUID(), messages: [], createdAt: new Date() };
-        setChats(prev => {
-            const updatedChats = [newChat, ...prev];
-            if (updatedChats.length > MAX_CHAT_HISTORY) {
-                return updatedChats.slice(0, MAX_CHAT_HISTORY);
-            }
-            return updatedChats;
-        });
-        chatId = newChat.id;
-        setActiveChatId(newChat.id);
-    }
     
-    if (!chatId) return;
+    // Create a new chat if the current one is not empty and the user forces it (e.g. by clicking a prompt)
+    // Or if there's no active chat
+    if (forceNewChat || !chatId) {
+        handleNewChat();
+        // The handleNewChat function sets the new active chat ID.
+        // We need to get the latest value. We can do this by accessing the state update function's return value if it was synchronous,
+        // but since it's not, we'll retrieve it from the `chats` state in the next render.
+        // A simple way to get the ID for the current submission is to find the newest empty chat.
+        const newEmptyChat = chats.find(c => c.messages.length === 0);
+        chatId = newEmptyChat ? newEmptyChat.id : chats[0].id;
+
+    }
+
+    // If still no chatId, we have an issue. This should not happen.
+    if (!chatId) {
+        console.error("Could not determine chat ID.");
+        return;
+    }
+
 
     const currentFileDataUri = fileDataUri;
 
@@ -956,3 +968,5 @@ export default function Home() {
     </SidebarProvider>
   );
 }
+
+    
