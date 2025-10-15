@@ -499,14 +499,9 @@ export default function Home() {
     let currentChatId = activeChatId;
 
     if (!currentChatId) {
-        console.error("No active chat ID found. This should not happen.");
-        // As a fallback, create a new chat, but this indicates a state issue.
         handleNewChat(); 
-        // We need to wait for the state update, so we'll submit in the next render cycle.
-        setTimeout(() => form.handleSubmit(onSubmit)(), 50);
-        return;
+        currentChatId = chats[0].id;
     }
-
 
     if (command === 'studentprogramsetting') {
         setProgramToEdit(null);
