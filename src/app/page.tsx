@@ -61,6 +61,7 @@ import {
   SidebarTrigger,
 } from '@/components/ui/sidebar';
 import { Skeleton } from '@/components/ui/skeleton';
+import { useTypingEffect } from '@/hooks/use-typing-effect';
 
 const MAX_CHAT_HISTORY = 8;
 
@@ -138,6 +139,8 @@ const AssistantMessage = ({ content }: { content: React.ReactNode | string }) =>
   const [audio, setAudio] = useState<HTMLAudioElement | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
+  const displayedContent = useTypingEffect(typeof content === 'string' ? content : '');
+
 
   const handleSpeak = async () => {
       if (audio) {
@@ -180,7 +183,7 @@ const AssistantMessage = ({ content }: { content: React.ReactNode | string }) =>
         <div className="max-w-xl w-full space-y-2">
             <div className="bg-accent/10 p-3 rounded-xl rounded-bl-none border border-accent/20 group relative">
                 <div className="prose prose-sm prose-invert max-w-none text-foreground pb-6">
-                    {typeof content === 'string' ? <ReactMarkdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]}>{content}</ReactMarkdown> : content}
+                    {typeof content === 'string' ? <ReactMarkdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]}>{displayedContent}</ReactMarkdown> : content}
                 </div>
                 <Button 
                   size="icon" 
