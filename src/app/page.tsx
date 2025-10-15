@@ -373,6 +373,7 @@ export default function Home() {
         return updatedChats;
     });
     setActiveChatId(newChat.id);
+    return newChat.id;
   };
 
   const form = useForm<z.infer<typeof formSchema>>({
@@ -391,16 +392,17 @@ export default function Home() {
   });
 
   const handlePrompt = (prompt: string) => {
+    let newChatId = activeChatId;
     if (activeChat && activeChat.messages.length > 0) {
-        handleNewChat();
-        setTimeout(() => {
-            form.setValue('question', prompt);
-            form.handleSubmit((data) => onSubmit(data))();
-        }, 0);
-    } else {
-      form.setValue('question', prompt);
-      form.handleSubmit((data) => onSubmit(data))();
+        newChatId = handleNewChat();
     }
+    // Use a timeout to ensure the state update for the new chat is processed
+    // before we set and submit the form.
+    setTimeout(() => {
+        setActiveChatId(newChatId);
+        form.setValue('question', prompt);
+        form.handleSubmit((data) => onSubmit(data))();
+    }, 0);
   };
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>, isSettings: boolean = false) => {
@@ -499,9 +501,13 @@ export default function Home() {
     
     let currentChatId = activeChatId;
     
+    // If there's no active chat, or if the active chat is empty and it's not the only chat,
+    // create a new one. This handles the initial state and starting new conversations.
     if (!currentChatId || (chats.find(c => c.id === currentChatId)?.messages.length === 0 && chats.length > 1)) {
-        handleNewChat(); 
-        currentChatId = chats[0].id;
+        const newChat = { id: crypto.randomUUID(), messages: [], createdAt: new Date() };
+        currentChatId = newChat.id;
+        setChats(prev => [newChat, ...prev.filter(c => c.messages.length > 0)]);
+        setActiveChatId(newChat.id);
     }
 
 
@@ -1002,3 +1008,5 @@ export default function Home() {
     </SidebarProvider>
   );
 }
+
+    
