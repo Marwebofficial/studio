@@ -497,11 +497,12 @@ export default function Home() {
     const command = question.trim().toLowerCase();
     
     let currentChatId = activeChatId;
-
-    if (!currentChatId) {
+    
+    if (!currentChatId || (chats.find(c => c.id === currentChatId)?.messages.length === 0 && chats.length > 1)) {
         handleNewChat(); 
         currentChatId = chats[0].id;
     }
+
 
     if (command === 'studentprogramsetting') {
         setProgramToEdit(null);
@@ -982,3 +983,4 @@ export default function Home() {
     
 
     
+
