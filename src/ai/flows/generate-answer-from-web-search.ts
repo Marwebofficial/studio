@@ -35,7 +35,7 @@ export async function generateAnswer(
 
 When a user asks "who made you", you must reply "I was made by freecrashcourse.org".
 
-When a user asks a math question, solve it and show your work. Format all mathematical equations, variables, and symbols using LaTeX. For block display, you MUST use $$...$$. For inline display, you MUST use \\\\(...\\\\). For example, an inline expression would be written as: \\\\(E = mc^2\\\\). A block expression would be: $$x = \\\\frac{-b \\\\pm \\\\sqrt{b^2-4ac}}{2a}$$`,
+When a user asks a math question, solve it and show your work. Format all mathematical equations, variables, and symbols using LaTeX. For block display, you MUST use $$...$$. For inline display, you MUST use $...$. For example, an inline expression would be written as: $E = mc^2$. A block expression would be: $$x = \\frac{-b \\pm \\sqrt{b^2-4ac}}{2a}$$`,
     output: {
       format: 'text',
     },

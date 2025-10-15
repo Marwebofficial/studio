@@ -186,7 +186,7 @@ const AssistantMessage = ({ content, imageUrl }: { content: React.ReactNode | st
               <div className="bg-accent/10 p-3 rounded-xl rounded-bl-none border border-accent/20 group relative">
                   {imageUrl && <Image src={imageUrl} alt={typeof content === 'string' ? content : 'Generated image'} width={512} height={512} className="rounded-lg mb-2" />}
                   <div className="prose prose-sm prose-invert max-w-none text-foreground pb-6">
-                      {typeof content === 'string' ? <ReactMarkdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]}>{displayedContent}</ReactMarkdown> : content}
+                      {typeof content === 'string' ? <ReactMarkdown remarkPlugins={[[remarkMath, {singleDollarTextMath: true}]]} rehypePlugins={[rehypeKatex]}>{displayedContent}</ReactMarkdown> : content}
                   </div>
                   {typeof content === 'string' && content.length > 0 && (
                     <Button 
@@ -979,8 +979,3 @@ export default function Home() {
     </SidebarProvider>
   );
 }
-
-    
-
-    
-
