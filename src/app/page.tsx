@@ -11,7 +11,7 @@ import { format } from 'date-fns';
 import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
 
-import { getAnswer, speak, getImage } from '@/app/actions';
+import { getAnswer, speak, getImage, getQuiz } from '@/app/actions';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -62,6 +62,7 @@ import {
 } from '@/components/ui/sidebar';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useTypingEffect } from '@/hooks/use-typing-effect';
+import { QuizView } from '@/components/quiz';
 
 const MAX_CHAT_HISTORY = 8;
 
@@ -291,7 +292,7 @@ const examplePrompts = [
     'Give me a practice essay question for a history exam on World War II.',
     '/imagine a majestic lion in the savanna at sunset',
     'What are the key strategies for managing time in a written exam?',
-    'Explain the concept of "thesis statement" for an argumentative essay.',
+    '/quiz the basics of React.js',
 ];
 
 export default function Home() {
@@ -500,16 +501,14 @@ export default function Home() {
     const command = question.trim().toLowerCase();
     
     let currentChatId = activeChatId;
-    
-    // If there's no active chat, or if the active chat is empty and it's not the only chat,
-    // create a new one. This handles the initial state and starting new conversations.
-    if (!currentChatId || (chats.find(c => c.id === currentChatId)?.messages.length === 0 && chats.length > 1)) {
-        const newChat = { id: crypto.randomUUID(), messages: [], createdAt: new Date() };
-        currentChatId = newChat.id;
-        setChats(prev => [newChat, ...prev.filter(c => c.messages.length > 0)]);
-        setActiveChatId(newChat.id);
-    }
 
+    if (!currentChatId || (activeChat?.messages.length === 0 && chats.length > 1)) {
+      const newChatId = handleNewChat();
+      currentChatId = newChatId;
+    } else if (activeChat?.messages.length > 0 && (command.startsWith('/imagine') || command.startsWith('/quiz'))) {
+        const newChatId = handleNewChat();
+        currentChatId = newChatId;
+    }
 
     if (command === 'studentprogramsetting') {
         setProgramToEdit(null);
@@ -586,6 +585,28 @@ export default function Home() {
                   ? { ...chat, messages: [...chat.messages, imageMessage] } 
                   : chat
             ));
+        } else if (question.startsWith('/quiz')) {
+            const topic = question.replace('/quiz', '').trim();
+            if (!topic) {
+                throw new Error('Please provide a topic for the quiz.');
+            }
+            const { quiz, error } = await getQuiz(topic);
+
+            if (error) throw new Error(error);
+            if (!quiz) throw new Error('Quiz generation failed to return a quiz.');
+
+            const quizMessage: Message = { 
+                id: crypto.randomUUID(), 
+                role: 'assistant', 
+                content: <QuizView quiz={quiz} />, 
+                createdAt: new Date() 
+            };
+            
+            setChats(prev => prev.map(chat => 
+                chat.id === currentChatId 
+                  ? { ...chat, messages: [...chat.messages, quizMessage] } 
+                  : chat
+            ));
 
         } else {
             const { answer, error } = await getAnswer(question, currentFileDataUri, signal);
@@ -645,7 +666,15 @@ export default function Home() {
   const getChatTitle = (chat: Chat) => {
     if (chat.messages.length === 0) return 'New Chat';
     const firstUserMessage = chat.messages.find(m => m.role === 'user');
-    return (firstUserMessage?.content as string) || 'New Chat';
+    const content = firstUserMessage?.content;
+
+    if (typeof content === 'string') {
+        if (content.startsWith('/quiz')) return `Quiz: ${content.substring(5).trim()}`;
+        if (content.startsWith('/imagine')) return `Image: ${content.substring(8).trim()}`;
+        return content;
+    }
+    
+    return 'New Chat';
   }
   
   const handleDeleteChat = (chatIdToDelete: string) => {
@@ -797,7 +826,7 @@ export default function Home() {
                             <div className="relative">
                               <FormControl>
                                   <Input
-                                      placeholder="Ask me anything, or type /imagine to generate an image..."
+                                      placeholder="Ask me anything, or type /imagine or /quiz..."
                                       autoComplete="off"
                                       disabled={isPending}
                                       {...form.register('question')}

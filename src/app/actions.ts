@@ -12,6 +12,10 @@ import {
     generateImage,
     type GenerateImageOutput,
 } from '@/ai/flows/generate-image';
+import {
+    generateQuiz,
+    type GenerateQuizOutput,
+} from '@/ai/flows/generate-quiz';
 
 export async function getAnswer(
   question: string,
@@ -61,6 +65,20 @@ export async function getImage(
         console.error(e);
         return {
             error: e.message || 'An error occurred during image generation.',
+        };
+    }
+}
+
+export async function getQuiz(
+    topic: string
+    ): Promise<{ quiz?: GenerateQuizOutput; error?: string }> {
+    try {
+        const quiz = await generateQuiz(topic);
+        return { quiz };
+    } catch (e: any) {
+        console.error(e);
+        return {
+            error: e.message || 'An error occurred during quiz generation.',
         };
     }
 }
