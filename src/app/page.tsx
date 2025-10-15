@@ -143,17 +143,18 @@ const AssistantMessage = ({ content, imageUrl }: { content: React.ReactNode | st
     const displayedContent = useTypingEffect(typeof content === 'string' ? content : '');
   
     const handleSpeak = async () => {
+        if (typeof content !== 'string' || content.length === 0) return;
+        
         if (audio) {
             if (isPlaying) {
                 audio.pause();
                 audio.currentTime = 0;
+                setIsPlaying(false);
             } else {
                 await audio.play();
             }
             return;
         }
-  
-        if (typeof content !== 'string' || content.length === 0) return;
   
         setIsGenerating(true);
         const { media, error } = await speak(content);
@@ -314,14 +315,14 @@ export default function Home() {
   const messages = activeChat?.messages ?? [];
 
   useEffect(() => {
-    // Load chats
+    // Load chats from localStorage
     const savedChats = localStorage.getItem('chats');
     const loadedChats = savedChats ? JSON.parse(savedChats, (key, value) => {
         if (key === 'createdAt') return new Date(value);
         return value;
     }) : [];
 
-    // Load student programs
+    // Load student programs from localStorage
     const savedPrograms = localStorage.getItem('studentPrograms');
     const loadedPrograms = savedPrograms ? JSON.parse(savedPrograms, (key, value) => {
         if (key === 'createdAt') return new Date(value);
@@ -329,18 +330,17 @@ export default function Home() {
     }) : [];
     setStudentPrograms(loadedPrograms);
 
-    if (loadedChats.length > 0) {
-        setChats(loadedChats);
-        setActiveChatId(loadedChats[0].id);
-    } else {
-        const newChat: Chat = {
-            id: crypto.randomUUID(),
-            messages: [],
-            createdAt: new Date(),
-        };
-        setChats([newChat]);
-        setActiveChatId(newChat.id);
-    }
+    // Create a new chat and set it as active
+    const newChat: Chat = {
+        id: crypto.randomUUID(),
+        messages: [],
+        createdAt: new Date(),
+    };
+
+    const updatedChats = [newChat, ...loadedChats];
+    setChats(updatedChats);
+    setActiveChatId(newChat.id);
+
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -390,17 +390,8 @@ export default function Home() {
   });
 
   const handlePrompt = (prompt: string) => {
-    // If the current chat is not empty, start a new one for the prompt
     if (activeChat && activeChat.messages.length > 0) {
-        const newChat: Chat = {
-            id: crypto.randomUUID(),
-            messages: [],
-            createdAt: new Date(),
-        };
-        setChats(prev => [newChat, ...prev]);
-        setActiveChatId(newChat.id);
-        
-        // Use a timeout to ensure the state update has been processed before submitting the form
+        handleNewChat();
         setTimeout(() => {
             form.setValue('question', prompt);
             form.handleSubmit((data) => onSubmit(data))();
@@ -504,6 +495,18 @@ export default function Home() {
   const onSubmit = async (data: z.infer<typeof formSchema>) => {
     const question = data.question;
     const command = question.trim().toLowerCase();
+    
+    let currentChatId = activeChatId;
+
+    if (!currentChatId) {
+        console.error("No active chat ID found. This should not happen.");
+        // As a fallback, create a new chat, but this indicates a state issue.
+        handleNewChat(); 
+        // We need to wait for the state update, so we'll submit in the next render cycle.
+        setTimeout(() => form.handleSubmit(onSubmit)(), 50);
+        return;
+    }
+
 
     if (command === 'studentprogramsetting') {
         setProgramToEdit(null);
@@ -528,27 +531,12 @@ export default function Home() {
             createdAt: new Date() 
         };
 
-        const chatId = activeChatId || chats[0].id;
         setChats(prev => prev.map(chat =>
-            chat.id === chatId ? { ...chat, messages: [...chat.messages, systemMessage] } : chat
+            chat.id === currentChatId ? { ...chat, messages: [...chat.messages, systemMessage] } : chat
         ));
         form.reset();
         return;
     }
-
-    let currentChatId = activeChatId;
-
-    if (!currentChatId || (activeChat?.messages.length === 0 && chats.length > 1) ) {
-      const newChat: Chat = {
-          id: crypto.randomUUID(),
-          messages: [],
-          createdAt: new Date(),
-      };
-      setChats(prev => [newChat, ...prev]);
-      setActiveChatId(newChat.id);
-      currentChatId = newChat.id;
-    }
-
 
     const currentFileDataUri = fileDataUri;
 
@@ -995,3 +983,5 @@ export default function Home() {
     </SidebarProvider>
   );
 }
+
+    
