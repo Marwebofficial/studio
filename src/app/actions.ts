@@ -8,6 +8,10 @@ import {
     textToSpeech,
     type TextToSpeechOutput,
 } from '@/ai/flows/text-to-speech';
+import {
+    generateImage,
+    type GenerateImageOutput,
+} from '@/ai/flows/generate-image';
 
 export async function getAnswer(
   question: string,
@@ -42,3 +46,17 @@ export async function speak(
       };
     }
   }
+
+export async function getImage(
+    prompt: string
+    ): Promise<{ imageUrl?: string; error?: string }> {
+    try {
+        const { imageUrl } = await generateImage(prompt);
+        return { imageUrl };
+    } catch (e: any) {
+        console.error(e);
+        return {
+            error: e.message || 'An error occurred during image generation.',
+        };
+    }
+}

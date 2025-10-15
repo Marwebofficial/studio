@@ -11,7 +11,7 @@ import { format } from 'date-fns';
 import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
 
-import { getAnswer, speak } from '@/app/actions';
+import { getAnswer, speak, getImage } from '@/app/actions';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -70,6 +70,7 @@ type Message = {
   role: 'user' | 'assistant' | 'error' | 'system';
   content: string | React.ReactNode;
   fileDataUri?: string;
+  imageUrl?: string;
   createdAt: Date;
 };
 
@@ -135,70 +136,73 @@ const UserMessage = ({ content, fileDataUri, createdAt }: { content: string, fil
 }
   
 
-const AssistantMessage = ({ content }: { content: React.ReactNode | string }) => {
-  const [audio, setAudio] = useState<HTMLAudioElement | null>(null);
-  const [isPlaying, setIsPlaying] = useState(false);
-  const [isGenerating, setIsGenerating] = useState(false);
-  const displayedContent = useTypingEffect(typeof content === 'string' ? content : '');
-
-
-  const handleSpeak = async () => {
-      if (audio) {
-          if (isPlaying) {
-              audio.pause();
-          } else {
-              await audio.play();
-          }
-          return;
-      }
-
-      if (typeof content !== 'string' || content.length === 0) return;
-
-      setIsGenerating(true);
-      const { media, error } = await speak(content);
-      setIsGenerating(false);
-
-      if (error) {
-          console.error('Error generating speech:', error);
-          return;
-      }
-
-      if (media) {
-          const newAudio = new Audio(media);
-          newAudio.onplay = () => setIsPlaying(true);
-          newAudio.onpause = () => setIsPlaying(false);
-          newAudio.onended = () => setIsPlaying(false);
-          setAudio(newAudio);
-          await newAudio.play();
-      }
-  };
+const AssistantMessage = ({ content, imageUrl }: { content: React.ReactNode | string, imageUrl?: string }) => {
+    const [audio, setAudio] = useState<HTMLAudioElement | null>(null);
+    const [isPlaying, setIsPlaying] = useState(false);
+    const [isGenerating, setIsGenerating] = useState(false);
+    const displayedContent = useTypingEffect(typeof content === 'string' ? content : '');
   
-    return (
-      <div className="flex items-start gap-3">
-        <Avatar className="h-8 w-8 border-2 border-accent/50">
-          <AvatarFallback className="bg-transparent">
-            <Bot className="h-4 w-4 text-accent" />
-          </AvatarFallback>
-        </Avatar>
-        <div className="max-w-xl w-full space-y-2">
-            <div className="bg-accent/10 p-3 rounded-xl rounded-bl-none border border-accent/20 group relative">
-                <div className="prose prose-sm prose-invert max-w-none text-foreground pb-6">
-                    {typeof content === 'string' ? <ReactMarkdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]}>{displayedContent}</ReactMarkdown> : content}
-                </div>
-                <Button 
-                  size="icon" 
-                  variant="ghost" 
-                  onClick={handleSpeak} 
-                  disabled={isGenerating}
-                  className="h-7 w-7 absolute bottom-1 right-1"
-                >
-                  {isGenerating ? <Loader className="h-4 w-4 animate-spin" /> : <Volume2 className="h-4 w-4" />}
-                </Button>
-            </div>
+    const handleSpeak = async () => {
+        if (audio) {
+            if (isPlaying) {
+                audio.pause();
+                audio.currentTime = 0;
+            } else {
+                await audio.play();
+            }
+            return;
+        }
+  
+        if (typeof content !== 'string' || content.length === 0) return;
+  
+        setIsGenerating(true);
+        const { media, error } = await speak(content);
+        setIsGenerating(false);
+  
+        if (error) {
+            console.error('Error generating speech:', error);
+            return;
+        }
+  
+        if (media) {
+            const newAudio = new Audio(media);
+            newAudio.onplay = () => setIsPlaying(true);
+            newAudio.onpause = () => setIsPlaying(false);
+            newAudio.onended = () => setIsPlaying(false);
+            setAudio(newAudio);
+            await newAudio.play();
+        }
+    };
+    
+      return (
+        <div className="flex items-start gap-3">
+          <Avatar className="h-8 w-8 border-2 border-accent/50">
+            <AvatarFallback className="bg-transparent">
+              <Bot className="h-4 w-4 text-accent" />
+            </AvatarFallback>
+          </Avatar>
+          <div className="max-w-xl w-full space-y-2">
+              <div className="bg-accent/10 p-3 rounded-xl rounded-bl-none border border-accent/20 group relative">
+                  {imageUrl && <Image src={imageUrl} alt={typeof content === 'string' ? content : 'Generated image'} width={512} height={512} className="rounded-lg mb-2" />}
+                  <div className="prose prose-sm prose-invert max-w-none text-foreground pb-6">
+                      {typeof content === 'string' ? <ReactMarkdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]}>{displayedContent}</ReactMarkdown> : content}
+                  </div>
+                  {typeof content === 'string' && content.length > 0 && (
+                    <Button 
+                        size="icon" 
+                        variant="ghost" 
+                        onClick={handleSpeak} 
+                        disabled={isGenerating}
+                        className="h-7 w-7 absolute bottom-1 right-1"
+                    >
+                        {isGenerating ? <Loader className="h-4 w-4 animate-spin" /> : <Volume2 className="h-4 w-4" />}
+                    </Button>
+                  )}
+              </div>
+          </div>
         </div>
-      </div>
-    );
-  };
+      );
+    };
   
 const StudentProgramMessage = ({ programs }: { programs: StudentProgram[] }) => {
     return (
@@ -284,7 +288,7 @@ const LoadingMessage = () => (
 
 const examplePrompts = [
     'Give me a practice essay question for a history exam on World War II.',
-    'What is the capital of Australia?',
+    '/imagine a majestic lion in the savanna at sunset',
     'What are the key strategies for managing time in a written exam?',
     'Explain the concept of "thesis statement" for an argumentative essay.',
 ];
@@ -388,13 +392,19 @@ export default function Home() {
   const handlePrompt = (prompt: string) => {
     // If the current chat is not empty, start a new one for the prompt
     if (activeChat && activeChat.messages.length > 0) {
-      handleNewChat();
-      // We need to wait for the state to update to get the new activeChatId
-      // A timeout works for this purpose.
-      setTimeout(() => {
-        form.setValue('question', prompt);
-        form.handleSubmit((data) => onSubmit(data, true))();
-      }, 0);
+        const newChat: Chat = {
+            id: crypto.randomUUID(),
+            messages: [],
+            createdAt: new Date(),
+        };
+        setChats(prev => [newChat, ...prev]);
+        setActiveChatId(newChat.id);
+        
+        // Use a timeout to ensure the state update has been processed before submitting the form
+        setTimeout(() => {
+            form.setValue('question', prompt);
+            form.handleSubmit((data) => onSubmit(data))();
+        }, 0);
     } else {
       form.setValue('question', prompt);
       form.handleSubmit((data) => onSubmit(data))();
@@ -491,7 +501,7 @@ export default function Home() {
     });
   };
 
-  const onSubmit = async (data: z.infer<typeof formSchema>, forceNewChat: boolean = false) => {
+  const onSubmit = async (data: z.infer<typeof formSchema>) => {
     const question = data.question;
     const command = question.trim().toLowerCase();
 
@@ -526,25 +536,17 @@ export default function Home() {
         return;
     }
 
-    let chatId = activeChatId;
-    
-    // Create a new chat if the current one is not empty and the user forces it (e.g. by clicking a prompt)
-    // Or if there's no active chat
-    if (forceNewChat || !chatId) {
-        handleNewChat();
-        // The handleNewChat function sets the new active chat ID.
-        // We need to get the latest value. We can do this by accessing the state update function's return value if it was synchronous,
-        // but since it's not, we'll retrieve it from the `chats` state in the next render.
-        // A simple way to get the ID for the current submission is to find the newest empty chat.
-        const newEmptyChat = chats.find(c => c.messages.length === 0);
-        chatId = newEmptyChat ? newEmptyChat.id : chats[0].id;
+    let currentChatId = activeChatId;
 
-    }
-
-    // If still no chatId, we have an issue. This should not happen.
-    if (!chatId) {
-        console.error("Could not determine chat ID.");
-        return;
+    if (!currentChatId || (activeChat?.messages.length === 0 && chats.length > 1) ) {
+      const newChat: Chat = {
+          id: crypto.randomUUID(),
+          messages: [],
+          createdAt: new Date(),
+      };
+      setChats(prev => [newChat, ...prev]);
+      setActiveChatId(newChat.id);
+      currentChatId = newChat.id;
     }
 
 
@@ -552,6 +554,7 @@ export default function Home() {
 
     form.reset();
     setFileDataUri(undefined);
+    setFileName(undefined);
     if (fileInputRef.current) {
         fileInputRef.current.value = '';
     }
@@ -559,7 +562,7 @@ export default function Home() {
     const userMessage: Message = { id: crypto.randomUUID(), role: 'user', content: question, fileDataUri: currentFileDataUri, createdAt: new Date() };
 
     setChats(prev => prev.map(chat => 
-      chat.id === chatId 
+      chat.id === currentChatId
         ? { ...chat, messages: [...chat.messages, userMessage] } 
         : chat
     ));
@@ -567,34 +570,56 @@ export default function Home() {
     setIsPending(true);
 
     try {
-      const { answer, error } = await getAnswer(question, currentFileDataUri);
-      
-      setIsPending(false);
+        if (question.startsWith('/imagine')) {
+            const prompt = question.replace('/imagine', '').trim();
+            if (!prompt) {
+                throw new Error('Please provide a prompt for the image generation.');
+            }
+            const { imageUrl, error } = await getImage(prompt);
 
-      if (error) {
-        throw new Error(error);
-      }
+            if (error) throw new Error(error);
+            if (!imageUrl) throw new Error('Image generation failed to return an image.');
+            
+            const imageMessage: Message = { 
+                id: crypto.randomUUID(), 
+                role: 'assistant', 
+                content: `> ${prompt}`,
+                imageUrl: imageUrl, 
+                createdAt: new Date() 
+            };
+            
+            setChats(prev => prev.map(chat => 
+                chat.id === currentChatId 
+                  ? { ...chat, messages: [...chat.messages, imageMessage] } 
+                  : chat
+            ));
 
-      const assistantMessage: Message = { id: crypto.randomUUID(), role: 'assistant', content: answer, createdAt: new Date() };
+        } else {
+            const { answer, error } = await getAnswer(question, currentFileDataUri);
+            
+            if (error) {
+              throw new Error(error);
+            }
       
-      setChats(prev => prev.map(chat => {
-        if (chat.id === chatId) {
-          return {
-            ...chat,
-            messages: [...chat.messages, assistantMessage]
-          };
+            const assistantMessage: Message = { id: crypto.randomUUID(), role: 'assistant', content: answer, createdAt: new Date() };
+            
+            setChats(prev => prev.map(chat => {
+              if (chat.id === currentChatId) {
+                return {
+                  ...chat,
+                  messages: [...chat.messages, assistantMessage]
+                };
+              }
+              return chat;
+            }));
         }
-        return chat;
-      }));
-
 
     } catch (error) {
-      setIsPending(false);
       const errorMessageContent = error instanceof Error ? error.message : 'An unknown error occurred.';
       const errorMessage: Message = { id: crypto.randomUUID(), role: 'error', content: errorMessageContent, createdAt: new Date() };
 
       setChats(prev => prev.map(chat => {
-        if (chat.id === chatId) {
+        if (chat.id === currentChatId) {
           return {
             ...chat,
             messages: [...chat.messages, errorMessage]
@@ -608,6 +633,8 @@ export default function Home() {
         title: 'Error',
         description: errorMessageContent,
       });
+    } finally {
+        setIsPending(false);
     }
   };
 
@@ -724,14 +751,14 @@ export default function Home() {
                                 </Card>
                             </div>
                         ) : (
-                        <div className="space-y-6 pt-6">
+                        <div className="space-y-6 pt-6 pb-12">
                             {messages.map((message) => {
                                 if (message.role === 'user') {
                                     return <UserMessage key={message.id} content={message.content as string} fileDataUri={message.fileDataUri} createdAt={message.createdAt} />;
                                 }
 
                                 if (message.role === 'assistant') {
-                                    return <AssistantMessage key={message.id} content={message.content} />;
+                                    return <AssistantMessage key={message.id} content={message.content} imageUrl={message.imageUrl} />;
                                 }
                                 if (message.role === 'error') {
                                     return <ErrorMessage key={message.id} content={message.content as string} />;
@@ -752,13 +779,13 @@ export default function Home() {
                     <div className="mx-auto max-w-3xl">
                     <Form {...form}>
                         <form
-                        onSubmit={form.handleSubmit((data) => onSubmit(data))}
+                        onSubmit={form.handleSubmit(onSubmit)}
                         className="relative"
                         >
                           <div className="relative">
                             <FormControl>
                                 <Input
-                                    placeholder="Ask me anything..."
+                                    placeholder="Ask me anything, or type /imagine to generate an image..."
                                     autoComplete="off"
                                     disabled={isPending}
                                     {...form.register('question')}
@@ -968,5 +995,3 @@ export default function Home() {
     </SidebarProvider>
   );
 }
-
-    
