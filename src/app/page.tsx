@@ -137,11 +137,14 @@ const UserMessage = ({ content, fileDataUri, createdAt }: { content: string, fil
 }
   
 
-const AssistantMessage = ({ content, imageUrl }: { content: React.ReactNode | string, imageUrl?: string }) => {
+const AssistantMessage = ({ content, imageUrl, isLastMessage }: { content: React.ReactNode | string, imageUrl?: string, isLastMessage: boolean }) => {
     const [audio, setAudio] = useState<HTMLAudioElement | null>(null);
     const [isPlaying, setIsPlaying] = useState(false);
     const [isGenerating, setIsGenerating] = useState(false);
-    const displayedContent = useTypingEffect(typeof content === 'string' ? content : '');
+    
+    const isStringContent = typeof content === 'string';
+    const typedContent = useTypingEffect(isStringContent ? content : '', isLastMessage ? 20 : 0);
+    const displayedContent = isLastMessage ? typedContent : content;
   
     const handleSpeak = async () => {
         if (typeof content !== 'string' || content.length === 0) return;
@@ -187,9 +190,9 @@ const AssistantMessage = ({ content, imageUrl }: { content: React.ReactNode | st
               <div className="bg-accent/10 p-3 rounded-xl rounded-bl-none border border-accent/20 group relative">
                   {imageUrl && <Image src={imageUrl} alt={typeof content === 'string' ? content : 'Generated image'} width={512} height={512} className="rounded-lg mb-2" />}
                   <div className="prose prose-sm prose-invert max-w-none text-foreground pb-6">
-                      {typeof content === 'string' ? <ReactMarkdown remarkPlugins={[[remarkMath, {singleDollarTextMath: true}]]} rehypePlugins={[rehypeKatex]}>{displayedContent}</ReactMarkdown> : content}
+                      {isStringContent ? <ReactMarkdown remarkPlugins={[[remarkMath, {singleDollarTextMath: true}]]} rehypePlugins={[rehypeKatex]}>{displayedContent as string}</ReactMarkdown> : content}
                   </div>
-                  {typeof content === 'string' && content.length > 0 && (
+                  {isStringContent && content.length > 0 && (
                     <Button 
                         size="icon" 
                         variant="ghost" 
@@ -502,12 +505,16 @@ export default function Home() {
     
     let currentChatId = activeChatId;
 
-    if (!currentChatId || (activeChat?.messages.length === 0 && chats.length > 1)) {
-      const newChatId = handleNewChat();
-      currentChatId = newChatId;
-    } else if (activeChat?.messages.length > 0 && (command.startsWith('/imagine') || command.startsWith('/quiz'))) {
-        const newChatId = handleNewChat();
-        currentChatId = newChatId;
+    if (!currentChatId || (activeChat?.messages.length === 0 && chats.find(c => c.id === currentChatId)?.messages.length === 0 && chats.length > 1)) {
+        currentChatId = handleNewChat();
+      } else if (activeChat?.messages.length > 0 && (command.startsWith('/imagine') || command.startsWith('/quiz'))) {
+        currentChatId = handleNewChat();
+      }
+      
+      // Ensure we have a valid chat ID before proceeding.
+      if (!currentChatId) {
+        const newId = handleNewChat();
+        currentChatId = newId;
     }
 
     if (command === 'studentprogramsetting') {
@@ -785,13 +792,14 @@ export default function Home() {
                             </div>
                         ) : (
                         <div className="space-y-6 pt-6 pb-12">
-                            {messages.map((message) => {
+                            {messages.map((message, index) => {
+                                const isLastMessage = index === messages.length - 1;
                                 if (message.role === 'user') {
                                     return <UserMessage key={message.id} content={message.content as string} fileDataUri={message.fileDataUri} createdAt={message.createdAt} />;
                                 }
 
                                 if (message.role === 'assistant') {
-                                    return <AssistantMessage key={message.id} content={message.content} imageUrl={message.imageUrl} />;
+                                    return <AssistantMessage key={message.id} content={message.content} imageUrl={message.imageUrl} isLastMessage={isLastMessage} />;
                                 }
                                 if (message.role === 'error') {
                                     return <ErrorMessage key={message.id} content={message.content as string} />;
@@ -1037,5 +1045,7 @@ export default function Home() {
     </SidebarProvider>
   );
 }
+
+    
 
     
