@@ -4,7 +4,7 @@ import { useState, useRef, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
-import { Bot, User, Send, GraduationCap, MessageSquarePlus, Paperclip, X, Trash, FileText, Loader, Volume2, BookCopy, PlusCircle, Edit } from 'lucide-react';
+import { Bot, User, Send, GraduationCap, MessageSquarePlus, Paperclip, X, Trash, FileText, Loader, Volume2, BookCopy, PlusCircle, Edit, Square } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import Image from 'next/image';
 import { format } from 'date-fns';
@@ -310,6 +310,7 @@ export default function Home() {
   const [programToEdit, setProgramToEdit] = useState<StudentProgram | null>(null);
   const [programToDelete, setProgramToDelete] = useState<string | null>(null);
   const [studentPrograms, setStudentPrograms] = useState<StudentProgram[]>([]);
+  const abortControllerRef = useRef<AbortController | null>(null);
 
   const activeChat = chats.find((chat) => chat.id === activeChatId);
   const messages = activeChat?.messages ?? [];
@@ -552,6 +553,8 @@ export default function Home() {
     ));
     
     setIsPending(true);
+    abortControllerRef.current = new AbortController();
+    const signal = abortControllerRef.current.signal;
 
     try {
         if (question.startsWith('/imagine')) {
@@ -599,26 +602,37 @@ export default function Home() {
         }
 
     } catch (error) {
-      const errorMessageContent = error instanceof Error ? error.message : 'An unknown error occurred.';
-      const errorMessage: Message = { id: crypto.randomUUID(), role: 'error', content: errorMessageContent, createdAt: new Date() };
+      if (error instanceof Error && error.name === 'AbortError') {
+        console.log('Request was aborted.');
+      } else {
+        const errorMessageContent = error instanceof Error ? error.message : 'An unknown error occurred.';
+        const errorMessage: Message = { id: crypto.randomUUID(), role: 'error', content: errorMessageContent, createdAt: new Date() };
 
-      setChats(prev => prev.map(chat => {
-        if (chat.id === currentChatId) {
-          return {
-            ...chat,
-            messages: [...chat.messages, errorMessage]
+        setChats(prev => prev.map(chat => {
+          if (chat.id === currentChatId) {
+            return {
+              ...chat,
+              messages: [...chat.messages, errorMessage]
+            }
           }
-        }
-        return chat;
-      }));
+          return chat;
+        }));
 
-      toast({
-        variant: 'destructive',
-        title: 'Error',
-        description: errorMessageContent,
-      });
+        toast({
+          variant: 'destructive',
+          title: 'Error',
+          description: errorMessageContent,
+        });
+      }
     } finally {
         setIsPending(false);
+        abortControllerRef.current = null;
+    }
+  };
+
+  const handleStop = () => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
     }
   };
 
@@ -761,58 +775,67 @@ export default function Home() {
 
                 <footer className="bg-card/50 backdrop-blur-sm border-t p-4">
                     <div className="mx-auto max-w-3xl">
-                    <Form {...form}>
-                        <form
-                        onSubmit={form.handleSubmit(onSubmit)}
-                        className="relative"
-                        >
-                          <div className="relative">
-                            <FormControl>
-                                <Input
-                                    placeholder="Ask me anything, or type /imagine to generate an image..."
-                                    autoComplete="off"
-                                    disabled={isPending}
-                                    {...form.register('question')}
-                                    className="pr-20 pl-12 h-12 bg-input rounded-full"
-                                />
-                            </FormControl>
-                            <Button type="button" size="icon" variant="ghost" className="absolute top-1/2 left-2 -translate-y-1/2 h-9 w-9 rounded-full" onClick={() => fileInputRef.current?.click()}>
-                                <Paperclip className="h-4 w-4" />
-                                <span className="sr-only">Attach file</span>
-                            </Button>
-                            <Button type="submit" size="icon" disabled={isPending} className="absolute top-1/2 right-2 -translate-y-1/2 h-9 w-9 rounded-full bg-accent hover:bg-accent/90">
-                                <Send className="h-4 w-4" />
-                                <span className="sr-only">Send</span>
-                            </Button>
-                          </div>
-                          {fileDataUri && !isSettingsOpen && (
-                            <div className="mt-4 relative w-24 h-24">
-                                {isImageFile ? (
-                                    <Image src={fileDataUri} alt="Preview" fill objectFit="cover" className="rounded-lg" />
-                                ) : (
-                                    <div className="w-full h-full bg-muted rounded-lg flex items-center justify-center">
-                                        <FileText className="w-10 h-10 text-muted-foreground" />
-                                    </div>
-                                )}
-                                <Button type="button" size="icon" variant="destructive" className="absolute -top-2 -right-2 h-6 w-6 rounded-full" onClick={() => removeFile()}>
-                                    <X className="h-4 w-4" />
-                                </Button>
+                    {isPending ? (
+                      <div className="flex justify-center">
+                        <Button variant="outline" onClick={handleStop}>
+                            <Square className="mr-2 h-4 w-4" />
+                            Stop Generating
+                        </Button>
+                      </div>
+                    ) : (
+                      <Form {...form}>
+                          <form
+                          onSubmit={form.handleSubmit(onSubmit)}
+                          className="relative"
+                          >
+                            <div className="relative">
+                              <FormControl>
+                                  <Input
+                                      placeholder="Ask me anything, or type /imagine to generate an image..."
+                                      autoComplete="off"
+                                      disabled={isPending}
+                                      {...form.register('question')}
+                                      className="pr-20 pl-12 h-12 bg-input rounded-full"
+                                  />
+                              </FormControl>
+                              <Button type="button" size="icon" variant="ghost" className="absolute top-1/2 left-2 -translate-y-1/2 h-9 w-9 rounded-full" onClick={() => fileInputRef.current?.click()}>
+                                  <Paperclip className="h-4 w-4" />
+                                  <span className="sr-only">Attach file</span>
+                              </Button>
+                              <Button type="submit" size="icon" disabled={isPending} className="absolute top-1/2 right-2 -translate-y-1/2 h-9 w-9 rounded-full bg-accent hover:bg-accent/90">
+                                  <Send className="h-4 w-4" />
+                                  <span className="sr-only">Send</span>
+                              </Button>
                             </div>
-                          )}
-
-                          <input type="file" accept="image/*,text/plain,.md" ref={fileInputRef} onChange={(e) => handleFileChange(e)} className="hidden" />
-                          
-                          <FormField
-                            control={form.control}
-                            name="question"
-                            render={() => (
-                            <FormItem>
-                                <FormMessage className="mt-2" />
-                            </FormItem>
+                            {fileDataUri && !isSettingsOpen && (
+                              <div className="mt-4 relative w-24 h-24">
+                                  {isImageFile ? (
+                                      <Image src={fileDataUri} alt="Preview" fill objectFit="cover" className="rounded-lg" />
+                                  ) : (
+                                      <div className="w-full h-full bg-muted rounded-lg flex items-center justify-center">
+                                          <FileText className="w-10 h-10 text-muted-foreground" />
+                                      </div>
+                                  )}
+                                  <Button type="button" size="icon" variant="destructive" className="absolute -top-2 -right-2 h-6 w-6 rounded-full" onClick={() => removeFile()}>
+                                      <X className="h-4 w-4" />
+                                  </Button>
+                              </div>
                             )}
-                        />
-                        </form>
-                    </Form>
+
+                            <input type="file" accept="image/*,text/plain,.md" ref={fileInputRef} onChange={(e) => handleFileChange(e)} className="hidden" />
+                            
+                            <FormField
+                              control={form.control}
+                              name="question"
+                              render={() => (
+                              <FormItem>
+                                  <FormMessage className="mt-2" />
+                              </FormItem>
+                              )}
+                          />
+                          </form>
+                      </Form>
+                    )}
                     <p className="text-xs text-center text-muted-foreground mt-3">
                         Press <kbd className="pointer-events-none inline-flex h-5 select-none items-center gap-1 rounded border bg-muted px-1.5 font-mono text-[10px] font-medium text-muted-foreground opacity-100"><span className="text-xs">⌘</span>B</kbd> to toggle the sidebar.
                     </p>
