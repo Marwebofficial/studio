@@ -141,10 +141,14 @@ const AssistantMessage = ({ content, imageUrl, isLastMessage }: { content: React
     const [audio, setAudio] = useState<HTMLAudioElement | null>(null);
     const [isPlaying, setIsPlaying] = useState(false);
     const [isGenerating, setIsGenerating] = useState(false);
+    const [typingStopped, setTypingStopped] = useState(false);
     
     const isStringContent = typeof content === 'string';
-    const typedContent = useTypingEffect(isStringContent ? content : '', isLastMessage ? 20 : 0);
-    const displayedContent = isLastMessage ? typedContent : content;
+    const typedContent = useTypingEffect(isStringContent ? content : '', isLastMessage ? 5 : 0);
+    
+    const isTyping = isLastMessage && isStringContent && typedContent.length < content.length && !typingStopped;
+
+    const displayedContent = isLastMessage && !typingStopped ? typedContent : content;
   
     const handleSpeak = async () => {
         if (typeof content !== 'string' || content.length === 0) return;
@@ -192,17 +196,29 @@ const AssistantMessage = ({ content, imageUrl, isLastMessage }: { content: React
                   <div className="prose prose-sm prose-invert max-w-none text-foreground pb-6">
                       {isStringContent ? <ReactMarkdown remarkPlugins={[[remarkMath, {singleDollarTextMath: true}]]} rehypePlugins={[rehypeKatex]}>{displayedContent as string}</ReactMarkdown> : content}
                   </div>
-                  {isStringContent && content.length > 0 && (
-                    <Button 
-                        size="icon" 
-                        variant="ghost" 
-                        onClick={handleSpeak} 
-                        disabled={isGenerating}
-                        className="h-7 w-7 absolute bottom-1 right-1"
-                    >
-                        {isGenerating ? <Loader className="h-4 w-4 animate-spin" /> : <Volume2 className="h-4 w-4" />}
-                    </Button>
-                  )}
+                  <div className="absolute bottom-1 right-1 flex items-center">
+                    {isTyping && (
+                      <Button 
+                          size="icon" 
+                          variant="ghost" 
+                          onClick={() => setTypingStopped(true)}
+                          className="h-7 w-7"
+                      >
+                          <Square className="h-4 w-4" />
+                      </Button>
+                    )}
+                    {isStringContent && content.length > 0 && (
+                      <Button 
+                          size="icon" 
+                          variant="ghost" 
+                          onClick={handleSpeak} 
+                          disabled={isGenerating}
+                          className="h-7 w-7"
+                      >
+                          {isGenerating ? <Loader className="h-4 w-4 animate-spin" /> : <Volume2 className="h-4 w-4" />}
+                      </Button>
+                    )}
+                  </div>
               </div>
           </div>
         </div>
@@ -506,16 +522,23 @@ export default function Home() {
     let currentChatId = activeChatId;
 
     if (!currentChatId || (activeChat?.messages.length === 0 && chats.find(c => c.id === currentChatId)?.messages.length === 0 && chats.length > 1)) {
+        // This case handles when an empty 'New Chat' is not the active one, and the user starts typing.
+        // It correctly sets the active chat to the empty one that's available.
+        const emptyChat = chats.find(c => c.messages.length === 0);
+        if (emptyChat) {
+            currentChatId = emptyChat.id;
+            setActiveChatId(currentChatId);
+        } else {
+            currentChatId = handleNewChat();
+        }
+    } else if (activeChat?.messages.length > 0 && (command.startsWith('/imagine') || command.startsWith('/quiz'))) {
+        // Create a new chat for special commands if the current chat is not empty.
         currentChatId = handleNewChat();
-      } else if (activeChat?.messages.length > 0 && (command.startsWith('/imagine') || command.startsWith('/quiz'))) {
+    } else if (!currentChatId) {
+        // Fallback to create a new chat if no chat ID is active for some reason.
         currentChatId = handleNewChat();
-      }
-      
-      // Ensure we have a valid chat ID before proceeding.
-      if (!currentChatId) {
-        const newId = handleNewChat();
-        currentChatId = newId;
     }
+
 
     if (command === 'studentprogramsetting') {
         setProgramToEdit(null);
