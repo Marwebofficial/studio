@@ -697,7 +697,7 @@ export default function Home() {
                 </SidebarContent>
             </Sidebar>
 
-            <div className="flex flex-1 flex-col h-svh bg-background/95 bg-[radial-gradient(ellipse_80%_80%_at_50%_-20%,rgba(120,119,198,0.3),rgba(255,255,255,0))]">
+            <div className="flex flex-1 flex-col h-svh bg-background/95 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-primary/20 via-accent/20 to-background">
                 <header className="flex items-center gap-3 border-b bg-card/50 backdrop-blur-sm p-4 h-16">
                     <SidebarTrigger className="md:hidden"/>
                     <h1 className="text-lg font-semibold tracking-tight">
@@ -983,5 +983,7 @@ export default function Home() {
     </SidebarProvider>
   );
 }
+
+    
 
     
