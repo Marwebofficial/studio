@@ -582,7 +582,7 @@ export default function Home() {
             ));
 
         } else {
-            const { answer, error } = await getAnswer(question, currentFileDataUri);
+            const { answer, error } = await getAnswer(question, currentFileDataUri, signal);
             
             if (error) {
               throw new Error(error);

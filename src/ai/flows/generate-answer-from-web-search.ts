@@ -20,7 +20,8 @@ export type GenerateAnswerInput = z.infer<
 >;
 
 export async function generateAnswer(
-  input: GenerateAnswerInput
+  input: GenerateAnswerInput,
+  signal: AbortSignal
 ): Promise<string> {
   const prompt = [];
   if (input.fileDataUri) {
@@ -39,7 +40,7 @@ When a user asks a math question, solve it and show your work. Format all mathem
     output: {
       format: 'text',
     },
-  });
+  }, { signal });
 
   return llmResponse.text;
 }

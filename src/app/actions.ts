@@ -15,17 +15,21 @@ import {
 
 export async function getAnswer(
   question: string,
-  fileDataUri?: string
+  fileDataUri: string | undefined,
+  signal: AbortSignal
 ): Promise<{ answer: string; error?: string }> {
   try {
     const input: GenerateAnswerInput = { question };
     if (fileDataUri) {
         input.fileDataUri = fileDataUri;
     }
-    const answer = await generateAnswer(input);
+    const answer = await generateAnswer(input, signal);
     return { answer };
   } catch (e: any) {
     console.error(e);
+    if (e.name === 'AbortError') {
+        return { answer: '', error: 'Request aborted.' };
+    }
     return {
       answer: '',
       error: e.message || 'An error occurred. Please try again.',
