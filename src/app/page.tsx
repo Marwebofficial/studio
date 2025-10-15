@@ -692,7 +692,7 @@ export default function Home() {
                 </SidebarContent>
             </Sidebar>
 
-            <div className="flex flex-1 flex-col h-svh bg-background/95 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-primary/20 via-accent/20 to-background">
+            <div className="flex flex-1 flex-col h-svh bg-background/95 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-primary/20 via-accent/20 to-background bg-[length:200%_200%] animate-background-pan">
                 <header className="flex items-center gap-3 border-b bg-card/50 backdrop-blur-sm p-4 h-16">
                     <SidebarTrigger className="md:hidden"/>
                     <h1 className="text-lg font-semibold tracking-tight">
