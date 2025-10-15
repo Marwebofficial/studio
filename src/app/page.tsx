@@ -135,67 +135,67 @@ const UserMessage = ({ content, fileDataUri, createdAt }: { content: string, fil
   
 
 const AssistantMessage = ({ content }: { content: React.ReactNode | string }) => {
-    const [audio, setAudio] = useState<HTMLAudioElement | null>(null);
-    const [isPlaying, setIsPlaying] = useState(false);
-    const [isGenerating, setIsGenerating] = useState(false);
+  const [audio, setAudio] = useState<HTMLAudioElement | null>(null);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [isGenerating, setIsGenerating] = useState(false);
+
+  const handleSpeak = async () => {
+      if (audio) {
+          if (isPlaying) {
+              audio.pause();
+          } else {
+              await audio.play();
+          }
+          return;
+      }
+
+      if (typeof content !== 'string' || content.length === 0) return;
+
+      setIsGenerating(true);
+      const { media, error } = await speak(content);
+      setIsGenerating(false);
+
+      if (error) {
+          console.error('Error generating speech:', error);
+          return;
+      }
+
+      if (media) {
+          const newAudio = new Audio(media);
+          newAudio.onplay = () => setIsPlaying(true);
+          newAudio.onpause = () => setIsPlaying(false);
+          newAudio.onended = () => setIsPlaying(false);
+          setAudio(newAudio);
+          await newAudio.play();
+      }
+  };
   
-    const handleSpeak = async () => {
-        if (audio) {
-            if (isPlaying) {
-                audio.pause();
-            } else {
-                await audio.play();
-            }
-            return;
-        }
-
-        if (typeof content !== 'string' || content.length === 0) return;
-
-        setIsGenerating(true);
-        const { media, error } = await speak(content);
-        setIsGenerating(false);
-
-        if (error) {
-            console.error('Error generating speech:', error);
-            return;
-        }
-
-        if (media) {
-            const newAudio = new Audio(media);
-            newAudio.onplay = () => setIsPlaying(true);
-            newAudio.onpause = () => setIsPlaying(false);
-            newAudio.onended = () => setIsPlaying(false);
-            setAudio(newAudio);
-            await newAudio.play();
-        }
-    };
-    
-      return (
-        <div className="flex items-start gap-3">
-          <Avatar className="h-8 w-8 border-2 border-accent/50">
-            <AvatarFallback className="bg-transparent">
-              <Bot className="h-4 w-4 text-accent" />
-            </AvatarFallback>
-          </Avatar>
-          <div className="max-w-xl w-full space-y-2">
-              <div className="bg-accent/10 p-3 rounded-xl rounded-bl-none border border-accent/20 group relative">
-                  <div className="prose prose-sm prose-invert max-w-none text-foreground pb-6">
-                      {typeof content === 'string' ? <ReactMarkdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]}>{content}</ReactMarkdown> : content}
-                  </div>
-                  <Button 
-                    size="icon" 
-                    variant="ghost" 
-                    onClick={handleSpeak} 
-                    disabled={isGenerating}
-                    className="h-7 w-7 absolute bottom-1 right-1"
-                  >
-                    {isGenerating ? <Loader className="h-4 w-4 animate-spin" /> : <Volume2 className="h-4 w-4" />}
-                  </Button>
-              </div>
-          </div>
+    return (
+      <div className="flex items-start gap-3">
+        <Avatar className="h-8 w-8 border-2 border-accent/50">
+          <AvatarFallback className="bg-transparent">
+            <Bot className="h-4 w-4 text-accent" />
+          </AvatarFallback>
+        </Avatar>
+        <div className="max-w-xl w-full space-y-2">
+            <div className="bg-accent/10 p-3 rounded-xl rounded-bl-none border border-accent/20 group relative">
+                <div className="prose prose-sm prose-invert max-w-none text-foreground pb-6">
+                    {typeof content === 'string' ? <ReactMarkdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]}>{content}</ReactMarkdown> : content}
+                </div>
+                <Button 
+                  size="icon" 
+                  variant="ghost" 
+                  onClick={handleSpeak} 
+                  disabled={isGenerating}
+                  className="h-7 w-7 absolute bottom-1 right-1"
+                >
+                  {isGenerating ? <Loader className="h-4 w-4 animate-spin" /> : <Volume2 className="h-4 w-4" />}
+                </Button>
+            </div>
         </div>
-      );
-    };
+      </div>
+    );
+  };
   
 const StudentProgramMessage = ({ programs }: { programs: StudentProgram[] }) => {
     return (
@@ -953,7 +953,3 @@ export default function Home() {
     </SidebarProvider>
   );
 }
-
-    
-
-    
