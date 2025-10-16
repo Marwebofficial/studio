@@ -23,7 +23,7 @@ export default function RootLayout({
   return (
     <html lang="en" className="dark" suppressHydrationWarning>
       <head>
-        <link rel="icon" href="data:image/svg+xml,<svg xmlns='http:/content://com.android.chrome.FileProvider/images/screenshot/17606155299051139683648.png'/>
+        <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='100' height='100' viewBox='0 0 100 100'><path fill='%23589CFE' d='M50 10L0 40l50 30 50-30L50 10z'/><path fill='%233B82F6' d='M10 45v25l40 20 40-20V45L50 65 10 45z'/></svg>"/>
         </head>
       <body className={cn('min-h-screen bg-background font-sans antialiased', fontSans.variable)}>
         {children}
