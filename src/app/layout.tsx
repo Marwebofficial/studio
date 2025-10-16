@@ -23,8 +23,8 @@ export default function RootLayout({
   return (
     <html lang="en" className="dark" suppressHydrationWarning>
       <head>
-        <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎓</text></svg>" />
-      </head>
+        <link rel="icon" href="data:image/svg+xml,<svg xmlns='http:/content://com.android.chrome.FileProvider/images/screenshot/17606155299051139683648.png'/>
+        </head>
       <body className={cn('min-h-screen bg-background font-sans antialiased', fontSans.variable)}>
         {children}
         <Toaster />
