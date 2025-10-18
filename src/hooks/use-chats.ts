@@ -86,14 +86,14 @@ export function useChats(userId?: string) {
   const updateChat = useCallback((chatId: string, updates: Partial<Chat>) => {
     if (!userId) return;
     const docRef = doc(firestore, 'users', userId, 'chats', chatId);
-    const anupdates: any = { ...updates };
+    // Directly modify the updates object instead of creating a new one to prevent re-renders.
     if (updates.createdAt instanceof Date) {
-        anupdates.createdAt = serverTimestamp();
+        (updates as any).createdAt = serverTimestamp();
     }
     if (updates.messages) {
-        anupdates.messages = updates.messages.map(m => ({ ...m, createdAt: m.createdAt instanceof Date ? m.createdAt : serverTimestamp() }));
+        (updates as any).messages = updates.messages.map(m => ({ ...m, createdAt: m.createdAt instanceof Date ? m.createdAt : serverTimestamp() }));
     }
-    setDocumentNonBlocking(docRef, anupdates, { merge: true });
+    setDocumentNonBlocking(docRef, updates, { merge: true });
   }, [userId, firestore]);
 
   const deleteChat = useCallback((chatId: string) => {
