@@ -125,7 +125,7 @@ const AssistantMessage = ({ message, isLastMessage }: { message: Message, isLast
     
     const content = message.content;
     const isStringContent = typeof content === 'string';
-    const typedContent = useTypingEffect(isStringContent ? content : '', isLastMessage ? 20 : 0);
+    const typedContent = useTypingEffect(isStringContent ? content : '', isLastMessage ? 10 : 0);
     
     const isTyping = isLastMessage && isStringContent && typedContent.length < content.length && !typingStopped;
 
@@ -308,7 +308,7 @@ export default function Home() {
   const { toast } = useToast();
   const auth = useAuth();
   const { user, isUserLoading } = useUser();
-  const { chats, addChat, updateChat, deleteChat, isLoading: isChatsLoading } = useChats(user?.uid);
+  const { chats, setChats, addChat, updateChat, deleteChat, isLoading: isChatsLoading } = useChats(user?.uid);
   const [activeChatId, setActiveChatId] = useState<string | null>(null);
   const [fileDataUri, setFileDataUri] = useState<string | undefined>();
   const [fileName, setFileName] = useState<string | undefined>();
@@ -364,7 +364,7 @@ export default function Home() {
             description: 'You need to be logged in to start a new chat.',
             variant: 'destructive',
         });
-        return;
+        return null;
     }
     const newChat = await addChat();
     if (newChat) {
@@ -1112,3 +1112,5 @@ export default function Home() {
     </SidebarProvider>
   );
 }
+
+    
