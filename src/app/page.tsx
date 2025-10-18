@@ -91,7 +91,7 @@ type StudentProgram = {
 };
 
 const formSchema = z.object({
-  question: z.string().min(1, 'Please enter a question.'),
+  question: z.string().trim().min(1, 'Please enter a question.'),
 });
 
 const settingsFormSchema = z.object({
@@ -103,9 +103,9 @@ const settingsFormSchema = z.object({
 const UserMessage = ({ content, fileDataUri, createdAt }: { content: string, fileDataUri?: string, createdAt: Date }) => {
     const isImage = fileDataUri?.startsWith('data:image');
     return (
-        <div className="flex items-start gap-3 justify-end">
-          <div className="max-w-xl w-full space-y-2">
-            <div className="bg-primary/10 border border-primary/20 text-foreground p-3 rounded-xl rounded-br-none">
+        <div class="flex items-start gap-3 justify-end">
+          <div class="max-w-xl w-full space-y-2">
+            <div class="bg-primary/10 border border-primary/20 text-foreground p-3 rounded-xl rounded-br-none">
               {fileDataUri && isImage && (
                 <Image 
                   src={fileDataUri} 
@@ -116,14 +116,14 @@ const UserMessage = ({ content, fileDataUri, createdAt }: { content: string, fil
                 />
               )}
               {fileDataUri && !isImage && (
-                <div className="mb-2 flex items-center gap-2 text-sm text-foreground/80">
+                <div class="mb-2 flex items-center gap-2 text-sm text-foreground/80">
                     <FileText className="h-4 w-4" />
                     <span>Attached file</span>
                 </div>
               )}
               <p className="text-sm text-foreground">{content}</p>
             </div>
-            <div className="text-xs text-muted-foreground text-right">
+            <div class="text-xs text-muted-foreground text-right">
                 {format(createdAt, 'HH:mm')}
             </div>
           </div>
@@ -184,19 +184,19 @@ const AssistantMessage = ({ content, imageUrl, isLastMessage }: { content: React
     };
     
       return (
-        <div className="flex items-start gap-3">
+        <div class="flex items-start gap-3">
           <Avatar className="h-8 w-8 border-2 border-accent/50">
             <AvatarFallback className="bg-transparent">
               <Bot className="h-4 w-4 text-accent" />
             </AvatarFallback>
           </Avatar>
-          <div className="max-w-xl w-full space-y-2">
-              <div className="bg-accent/10 p-3 rounded-xl rounded-bl-none border border-accent/20 group relative">
+          <div class="max-w-xl w-full space-y-2">
+              <div class="bg-accent/10 p-3 rounded-xl rounded-bl-none border border-accent/20 group relative">
                   {imageUrl && <Image src={imageUrl} alt={typeof content === 'string' ? content : 'Generated image'} width={512} height={512} className="rounded-lg mb-2" />}
-                  <div className="prose prose-sm prose-invert max-w-none text-foreground pb-6">
+                  <div class="prose prose-sm prose-invert max-w-none text-foreground pb-6">
                       {isStringContent ? <ReactMarkdown remarkPlugins={[[remarkMath, {singleDollarTextMath: true}]]} rehypePlugins={[rehypeKatex]}>{displayedContent as string}</ReactMarkdown> : content}
                   </div>
-                  <div className="absolute bottom-1 right-1 flex items-center">
+                  <div class="absolute bottom-1 right-1 flex items-center">
                     {isTyping && (
                       <Button 
                           size="icon" 
@@ -227,18 +227,18 @@ const AssistantMessage = ({ content, imageUrl, isLastMessage }: { content: React
   
 const StudentProgramMessage = ({ programs }: { programs: StudentProgram[] }) => {
     return (
-        <div className="flex items-start gap-3">
+        <div class="flex items-start gap-3">
             <Avatar className="h-8 w-8 border-2 border-accent/50">
                 <AvatarFallback className="bg-transparent">
                     <BookCopy className="h-4 w-4 text-accent" />
                 </AvatarFallback>
             </Avatar>
-            <div className="max-w-xl w-full space-y-2">
-                <div className="bg-accent/10 p-3 rounded-xl rounded-bl-none border border-accent/20">
-                    <div className="prose prose-sm prose-invert max-w-none text-foreground">
-                        <h3 className="text-foreground">Student Program Entries</h3>
+            <div class="max-w-xl w-full space-y-2">
+                <div class="bg-accent/10 p-3 rounded-xl rounded-bl-none border border-accent/20">
+                    <div class="prose prose-sm prose-invert max-w-none text-foreground">
+                        <h3 class="text-foreground">Student Program Entries</h3>
                         {programs.length > 0 ? (
-                            <ul className="space-y-4">
+                            <ul class="space-y-4">
                                 {programs.map(program => (
                                     <li key={program.id} className="not-prose">
                                         <Card className="bg-background/50">
@@ -251,7 +251,7 @@ const StudentProgramMessage = ({ programs }: { programs: StudentProgram[] }) => 
                                                     program.fileDataUri.startsWith('data:image') ? (
                                                         <Image src={program.fileDataUri} alt={program.title} width={200} height={200} className="rounded-md mt-2" />
                                                     ) : (
-                                                        <div className="mt-2 flex items-center gap-2 text-sm text-foreground/80">
+                                                        <div class="mt-2 flex items-center gap-2 text-sm text-foreground/80">
                                                             <FileText className="h-4 w-4" />
                                                             <span>{program.fileName || 'Attached file'}</span>
                                                         </div>
@@ -273,15 +273,15 @@ const StudentProgramMessage = ({ programs }: { programs: StudentProgram[] }) => 
 };
   
 const ErrorMessage = ({ content }: { content: string }) => (
-    <div className="flex items-start gap-4">
+    <div class="flex items-start gap-4">
       <Avatar className="h-8 w-8 border bg-destructive text-destructive-foreground">
         <AvatarFallback className="bg-destructive text-destructive-foreground">
             <Bot className="h-4 w-4" />
         </AvatarFallback>
       </Avatar>
-      <div className="flex-1 space-y-2">
-        <p className="font-semibold text-destructive">Error</p>
-        <div className="prose prose-sm max-w-none text-destructive">
+      <div class="flex-1 space-y-2">
+        <p class="font-semibold text-destructive">Error</p>
+        <div class="prose prose-sm max-w-none text-destructive">
             <p>{content}</p>
         </div>
       </div>
@@ -289,15 +289,15 @@ const ErrorMessage = ({ content }: { content: string }) => (
 );
 
 const LoadingMessage = () => (
-    <div className="flex items-start gap-3">
+    <div class="flex items-start gap-3">
       <Avatar className="h-8 w-8 border-2 border-accent/50">
         <AvatarFallback className="bg-transparent">
           <Bot className="h-4 w-4 text-accent" />
         </AvatarFallback>
       </Avatar>
-      <div className="max-w-xl w-full space-y-4">
-        <div className="bg-accent/10 p-3 rounded-xl rounded-bl-none border border-accent/20">
-            <div className="space-y-2">
+      <div class="max-w-xl w-full space-y-4">
+        <div class="bg-accent/10 p-3 rounded-xl rounded-bl-none border border-accent/20">
+            <div class="space-y-2">
                 <Skeleton className="h-4 w-5/6" />
                 <Skeleton className="h-4 w-full" />
                 <Skeleton className="h-4 w-4/6" />
@@ -517,6 +517,7 @@ export default function Home() {
 
   const onSubmit = async (data: z.infer<typeof formSchema>) => {
     const question = data.question;
+
     const command = question.trim().toLowerCase();
     
     let currentChatId: string;
@@ -723,7 +724,7 @@ export default function Home() {
 
   return (
     <SidebarProvider>
-        <div className="flex h-svh w-full bg-background">
+        <div class="flex h-svh w-full bg-background">
             <Sidebar collapsible="icon" className="border-r-0 md:bg-card/50 backdrop-blur-sm md:border-r">
                 <SidebarHeader>
                   <Button variant="ghost" className="w-full justify-start h-10" onClick={handleNewChat}>
@@ -733,7 +734,7 @@ export default function Home() {
                 </SidebarHeader>
                 <SidebarContent className="p-2">
                     <ScrollArea className="h-full">
-                        <div className="flex flex-col gap-1 pr-2">
+                        <div class="flex flex-col gap-1 pr-2">
                             {chats.filter(c => c.messages.length > 0).map(chat => (
                                 <div key={chat.id} className="group relative">
                                   <Button
@@ -745,7 +746,7 @@ export default function Home() {
                                   >
                                       {getChatTitle(chat)}
                                   </Button>
-                                  <div className="absolute right-0 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity">
+                                  <div class="absolute right-0 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity">
                                       <Button
                                         variant="ghost"
                                         size="icon"
@@ -762,22 +763,22 @@ export default function Home() {
                 </SidebarContent>
             </Sidebar>
 
-            <div className="flex flex-1 flex-col h-svh bg-background/95 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-primary/20 via-accent/20 to-background bg-[length:200%_200%] animate-background-pan">
-                <header className="flex items-center gap-3 border-b bg-card/50 backdrop-blur-sm p-4 h-16">
+            <div class="flex flex-1 flex-col h-svh bg-background/95 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-primary/20 via-accent/20 to-background bg-[length:200%_200%] animate-background-pan">
+                <header class="flex items-center gap-3 border-b bg-card/50 backdrop-blur-sm p-4 h-16">
                     <SidebarTrigger className="md:hidden"/>
-                    <h1 className="text-lg font-semibold tracking-tight">
+                    <h1 class="text-lg font-semibold tracking-tight">
                         freechat tutor
                     </h1>
                 </header>
                 
-                <main className="flex-1 overflow-hidden">
+                <main class="flex-1 overflow-hidden">
                     <ScrollArea className="h-full" viewportRef={scrollAreaViewportRef}>
-                        <div className="mx-auto max-w-3xl px-4 md:px-6">
+                        <div class="mx-auto max-w-3xl px-4 md:px-6">
                         {messages.length === 0 && !isPending ? (
-                            <div className="flex flex-col items-center justify-center h-full min-h-[calc(100vh-14rem)]">
+                            <div class="flex flex-col items-center justify-center h-full min-h-[calc(100vh-14rem)]">
                                 <Card className="w-full max-w-2xl text-center shadow-none border-0 bg-transparent">
                                     <CardHeader className="gap-2">
-                                        <div className="flex justify-center">
+                                        <div class="flex justify-center">
                                             <Avatar className="h-16 w-16 border-2 border-accent/20 bg-transparent">
                                                 <AvatarFallback className="bg-transparent">
                                                     <GraduationCap className="h-8 w-8 text-accent" />
@@ -788,7 +789,7 @@ export default function Home() {
                                         <CardDescription>Your personal AI tutor for any question.</CardDescription>
                                     </CardHeader>
                                     <CardContent>
-                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                        <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
                                             {examplePrompts.map((prompt) => (
                                                 <Button 
                                                     key={prompt}
@@ -804,7 +805,7 @@ export default function Home() {
                                 </Card>
                             </div>
                         ) : (
-                        <div className="space-y-6 pt-6 pb-12">
+                        <div class="space-y-6 pt-6 pb-12">
                             {messages.map((message, index) => {
                                 const isLastMessage = index === messages.length - 1;
                                 if (message.role === 'user') {
@@ -829,10 +830,10 @@ export default function Home() {
                     </ScrollArea>
                 </main>
 
-                <footer className="bg-card/50 backdrop-blur-sm border-t p-4">
-                    <div className="mx-auto max-w-3xl">
+                <footer class="bg-card/50 backdrop-blur-sm border-t p-4">
+                    <div class="mx-auto max-w-3xl">
                     {isPending ? (
-                      <div className="flex justify-center">
+                      <div class="flex justify-center">
                         <Button variant="outline" onClick={handleStop}>
                             <Square className="mr-2 h-4 w-4" />
                             Stop Generating
@@ -844,7 +845,7 @@ export default function Home() {
                           onSubmit={form.handleSubmit(onSubmit)}
                           className="relative"
                           >
-                            <div className="relative">
+                            <div class="relative">
                               <FormControl>
                                   <Input
                                       placeholder="Ask me anything, or type /imagine or /quiz..."
@@ -856,19 +857,19 @@ export default function Home() {
                               </FormControl>
                               <Button type="button" size="icon" variant="ghost" className="absolute top-1/2 left-2 -translate-y-1/2 h-9 w-9 rounded-full" onClick={() => fileInputRef.current?.click()}>
                                   <Paperclip className="h-4 w-4" />
-                                  <span className="sr-only">Attach file</span>
+                                  <span class="sr-only">Attach file</span>
                               </Button>
                               <Button type="submit" size="icon" disabled={isPending} className="absolute top-1/2 right-2 -translate-y-1/2 h-9 w-9 rounded-full bg-accent hover:bg-accent/90">
                                   <Send className="h-4 w-4" />
-                                  <span className="sr-only">Send</span>
+                                  <span class="sr-only">Send</span>
                               </Button>
                             </div>
                             {fileDataUri && !isSettingsOpen && (
-                              <div className="mt-4 relative w-24 h-24">
+                              <div class="mt-4 relative w-24 h-24">
                                   {isImageFile ? (
                                       <Image src={fileDataUri} alt="Preview" fill objectFit="cover" className="rounded-lg" />
                                   ) : (
-                                      <div className="w-full h-full bg-muted rounded-lg flex items-center justify-center">
+                                      <div class="w-full h-full bg-muted rounded-lg flex items-center justify-center">
                                           <FileText className="w-10 h-10 text-muted-foreground" />
                                       </div>
                                   )}
@@ -892,8 +893,8 @@ export default function Home() {
                           </form>
                       </Form>
                     )}
-                    <p className="text-xs text-center text-muted-foreground mt-3">
-                        Press <kbd className="pointer-events-none inline-flex h-5 select-none items-center gap-1 rounded border bg-muted px-1.5 font-mono text-[10px] font-medium text-muted-foreground opacity-100"><span className="text-xs">⌘</span>B</kbd> to toggle the sidebar.
+                    <p class="text-xs text-center text-muted-foreground mt-3">
+                        Press <kbd class="pointer-events-none inline-flex h-5 select-none items-center gap-1 rounded border bg-muted px-1.5 font-mono text-[10px] font-medium text-muted-foreground opacity-100"><span class="text-xs">⌘</span>B</kbd> to toggle the sidebar.
                     </p>
                     </div>
                 </footer>
@@ -939,7 +940,7 @@ export default function Home() {
                                 {programToEdit ? 'Edit the' : 'Add a new'} program setting. Provide a title and either type content or upload a file.
                             </DialogDescription>
                         </DialogHeader>
-                        <div className="grid gap-4 py-4">
+                        <div class="grid gap-4 py-4">
                             <FormField
                                 control={settingsForm.control}
                                 name="title"
@@ -966,14 +967,14 @@ export default function Home() {
                                     </FormItem>
                                 )}
                             />
-                             <div className="space-y-2">
+                             <div class="space-y-2">
                                 <Label>Or Upload a File</Label>
                                 {fileDataUri ? (
-                                    <div className="relative w-24 h-24">
+                                    <div class="relative w-24 h-24">
                                         {isImageFile ? (
                                             <Image src={fileDataUri} alt="Preview" fill objectFit="cover" className="rounded-lg" />
                                         ) : (
-                                            <div className="w-full h-full bg-muted rounded-lg flex items-center justify-center">
+                                            <div class="w-full h-full bg-muted rounded-lg flex items-center justify-center">
                                                 <FileText className="w-10 h-10 text-muted-foreground" />
                                             </div>
                                         )}
@@ -1009,14 +1010,14 @@ export default function Home() {
                     </DialogDescription>
                 </DialogHeader>
                 <ScrollArea className="max-h-[60vh]">
-                    <div className="space-y-4 pr-6">
+                    <div class="space-y-4 pr-6">
                         {studentPrograms.length > 0 ? studentPrograms.map(program => (
                              <Card key={program.id} className="flex items-center justify-between p-4">
                                 <div>
-                                    <p className="font-semibold">{program.title}</p>
-                                    <p className="text-sm text-muted-foreground">{program.content?.substring(0, 30) || program.fileName}{'...'}</p>
+                                    <p class="font-semibold">{program.title}</p>
+                                    <p class="text-sm text-muted-foreground">{program.content?.substring(0, 30) || program.fileName}{'...'}</p>
                                 </div>
-                                <div className="flex gap-2">
+                                <div class="flex gap-2">
                                     <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => handleEditProgram(program)}>
                                         <Edit className="h-4 w-4" />
                                     </Button>
@@ -1026,7 +1027,7 @@ export default function Home() {
                                 </div>
                             </Card>
                         )) : (
-                            <p className="text-center text-muted-foreground py-8">No program entries found.</p>
+                            <p class="text-center text-muted-foreground py-8">No program entries found.</p>
                         )}
                     </div>
                 </ScrollArea>
@@ -1063,3 +1064,6 @@ export default function Home() {
 
     
 
+
+
+    
