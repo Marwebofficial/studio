@@ -17,26 +17,6 @@
       },
       "required": ["email"]
     },
-    "Chat": {
-      "title": "Chat",
-      "description": "Represents a single chat conversation.",
-      "type": "object",
-      "properties": {
-        "createdAt": {
-          "type": "string",
-          "format": "date-time",
-          "description": "The timestamp when the chat was created."
-        },
-        "messages": {
-          "type": "array",
-          "description": "An array of messages in the chat.",
-          "items": {
-            "$ref": "#/entities/Message"
-          }
-        }
-      },
-      "required": ["createdAt", "messages"]
-    },
     "Message": {
       "title": "Message",
       "description": "Represents a single message within a chat.",
@@ -81,12 +61,6 @@
         "$ref": "#/entities/UserProfile"
       },
       "description": "Stores user profile information."
-    },
-    "/users/{userId}/chats/{chatId}": {
-      "schema": {
-        "$ref": "#/entities/Chat"
-      },
-      "description": "Stores the chat history for a user."
     }
   }
 }

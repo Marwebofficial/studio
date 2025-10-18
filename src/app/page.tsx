@@ -66,7 +66,6 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { useTypingEffect } from '@/hooks/use-typing-effect';
 import { QuizView, type QuizData } from '@/components/quiz';
 import { useAuth, useUser } from '@/firebase';
-import { useChats } from '@/hooks/use-chats';
 import { signOut } from 'firebase/auth';
 import type { Message, Chat } from '@/lib/types';
 
@@ -309,7 +308,7 @@ export default function Home() {
   const { toast } = useToast();
   const auth = useAuth();
   const { user, isUserLoading } = useUser();
-  const { chats, setChats, addChat, updateChat, deleteChat, isLoading: isChatsLoading } = useChats(user?.uid);
+  const [chats, setChats] = useState<Chat[]>([]);
   const [activeChatId, setActiveChatId] = useState<string | null>(null);
   const [fileDataUri, setFileDataUri] = useState<string | undefined>();
   const [fileName, setFileName] = useState<string | undefined>();
@@ -327,6 +326,7 @@ export default function Home() {
 
   const activeChat = chats.find((chat) => chat.id === activeChatId);
   const messages = activeChat?.messages ?? [];
+  const isChatsLoading = false; // Not loading from firestore anymore
 
   useEffect(() => {
     // Load student programs from localStorage
@@ -336,43 +336,45 @@ export default function Home() {
         return value;
     }) : [];
     setStudentPrograms(loadedPrograms);
+
+    const savedChats = localStorage.getItem('chats');
+    if (savedChats) {
+        const loadedChats = JSON.parse(savedChats) as Chat[];
+        setChats(loadedChats);
+        if (loadedChats.length > 0) {
+            setActiveChatId(localStorage.getItem('activeChatId') || loadedChats[0].id)
+        } else {
+            handleNewChat();
+        }
+    } else {
+        handleNewChat();
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
-    if (!isChatsLoading && user) {
-        if (chats.length > 0 && !activeChatId) {
-            setActiveChatId(chats[0].id);
-        } else if (chats.length === 0) {
-            handleNewChat();
-        }
+    if (chats.length > 0) {
+        localStorage.setItem('chats', JSON.stringify(chats));
     }
-    if (!user) {
-        setChats([]);
-        setActiveChatId(null);
+    if (activeChatId) {
+        localStorage.setItem('activeChatId', activeChatId);
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isChatsLoading, chats, user, activeChatId]);
+  }, [chats, activeChatId]);
 
 
   useEffect(() => {
     localStorage.setItem('studentPrograms', JSON.stringify(studentPrograms));
   }, [studentPrograms]);
   
-  const handleNewChat = async () => {
-    if (!user) {
-        toast({
-            title: 'Please log in',
-            description: 'You need to be logged in to start a new chat.',
-            variant: 'destructive',
-        });
-        return null;
-    }
-    const newChat = await addChat();
-    if (newChat) {
-      setActiveChatId(newChat.id);
-      return newChat.id;
-    }
-    return null;
+  const handleNewChat = () => {
+    const newChat: Chat = {
+      id: crypto.randomUUID(),
+      messages: [],
+      createdAt: new Date().toISOString(),
+    };
+    setChats((prev) => [newChat, ...prev]);
+    setActiveChatId(newChat.id);
+    return newChat.id;
   };
 
   const form = useForm<z.infer<typeof formSchema>>({
@@ -393,7 +395,7 @@ export default function Home() {
   const handlePrompt = async (prompt: string) => {
     let newChatId = activeChatId;
     if (activeChat && activeChat.messages.length > 0) {
-        const createdChatId = await handleNewChat();
+        const createdChatId = handleNewChat();
         if (!createdChatId) return;
         newChatId = createdChatId;
     }
@@ -499,12 +501,15 @@ export default function Home() {
   };
 
   const setMessages = (chatId: string, newMessages: Message[] | ((prevMessages: Message[]) => Message[])) => {
-    const chat = chats.find(c => c.id === chatId);
-    if (!chat) return;
-
-    const finalMessages = typeof newMessages === 'function' ? newMessages(chat.messages) : newMessages;
-
-    updateChat(chatId, { messages: finalMessages });
+    setChats(prevChats => {
+        return prevChats.map(chat => {
+            if (chat.id === chatId) {
+                const finalMessages = typeof newMessages === 'function' ? newMessages(chat.messages) : newMessages;
+                return { ...chat, messages: finalMessages };
+            }
+            return chat;
+        });
+    });
   };
 
 
@@ -528,11 +533,10 @@ export default function Home() {
     
     const isNewConversation = activeChat?.messages.length === 0;
 
-    if (isNewConversation) {
-        currentChatId = activeChatId!;
+    if (isNewConversation && activeChatId) {
+        currentChatId = activeChatId;
     } else {
-        const newChatId = await handleNewChat();
-        if (!newChatId) return;
+        const newChatId = handleNewChat();
         currentChatId = newChatId;
     }
 
@@ -673,14 +677,14 @@ export default function Home() {
   }
   
   const handleDeleteChat = async (chatIdToDelete: string) => {
-    await deleteChat(chatIdToDelete);
+    const newChats = chats.filter(chat => chat.id !== chatIdToDelete);
+    setChats(newChats);
 
     if (activeChatId === chatIdToDelete) {
-        const remainingChats = chats.filter(chat => chat.id !== chatIdToDelete);
-        if (remainingChats.length > 0) {
-            setActiveChatId(remainingChats[0].id);
+        if (newChats.length > 0) {
+            setActiveChatId(newChats[0].id);
         } else {
-            await handleNewChat();
+            handleNewChat();
         }
     }
   };
@@ -725,14 +729,6 @@ export default function Home() {
       );
     }
     
-    if (!user) {
-        return (
-            <div className="text-center text-sm text-muted-foreground p-4">
-                Please log in to see your chat history.
-            </div>
-        )
-    }
-
     const displayedChats = chats.filter(c => c.messages.length > 0);
 
     if (displayedChats.length === 0) {
