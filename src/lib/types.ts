@@ -8,13 +8,13 @@ export type Message = {
     fileDataUri?: string;
     imageUrl?: string;
     quiz?: GenerateQuizOutput;
-    createdAt: Date;
+    createdAt: string;
 };
   
 export type Chat = {
     id: string;
     messages: Message[];
-    createdAt: Date;
+    createdAt: string;
 };
 
 export type QuizQuestion = {

@@ -46,8 +46,8 @@ export function useChats(userId?: string) {
             return {
                 id: doc.id,
                 ...data,
-                createdAt: data.createdAt?.toDate(),
-                messages: data.messages.map((m: any) => ({...m, createdAt: m.createdAt?.toDate()}))
+                createdAt: data.createdAt?.toDate().toISOString(),
+                messages: data.messages.map((m: any) => ({...m, createdAt: m.createdAt?.toDate().toISOString()}))
             } as Chat;
         });
         setChats(loadedChats);
@@ -75,7 +75,7 @@ export function useChats(userId?: string) {
         const chatsColRef = collection(firestore, 'users', userId, 'chats');
         const docRef = await addDoc(chatsColRef, newChatData);
         // We don't add to local state, we let the snapshot listener handle it
-        return { ...newChatData, id: docRef.id, createdAt: new Date() } as Chat;
+        return { ...newChatData, id: docRef.id, createdAt: new Date().toISOString() } as Chat;
     } catch (err) {
         console.error("Error adding chat: ", err);
         setError(err as Error);
@@ -87,11 +87,11 @@ export function useChats(userId?: string) {
     if (!userId) return;
     const docRef = doc(firestore, 'users', userId, 'chats', chatId);
     // Directly modify the updates object instead of creating a new one to prevent re-renders.
-    if (updates.createdAt instanceof Date) {
-        (updates as any).createdAt = serverTimestamp();
+    if (updates.createdAt && typeof updates.createdAt === 'string') {
+        (updates as any).createdAt = new Date(updates.createdAt);
     }
     if (updates.messages) {
-        (updates as any).messages = updates.messages.map(m => ({ ...m, createdAt: m.createdAt instanceof Date ? m.createdAt : serverTimestamp() }));
+        (updates as any).messages = updates.messages.map(m => ({ ...m, createdAt: (m.createdAt && typeof m.createdAt === 'string') ? new Date(m.createdAt) : serverTimestamp() }));
     }
     setDocumentNonBlocking(docRef, updates, { merge: true });
   }, [userId, firestore]);

@@ -80,7 +80,7 @@ const settingsFormSchema = z.object({
 });
 
 
-const UserMessage = ({ content, fileDataUri, createdAt }: { content: string, fileDataUri?: string, createdAt: Date }) => {
+const UserMessage = ({ content, fileDataUri, createdAt }: { content: string, fileDataUri?: string, createdAt: string }) => {
     const isImage = fileDataUri?.startsWith('data:image');
     return (
         <div className="flex items-start gap-3 justify-end">
@@ -104,7 +104,7 @@ const UserMessage = ({ content, fileDataUri, createdAt }: { content: string, fil
               <p className="text-sm text-foreground">{content}</p>
             </div>
             <div className="text-xs text-muted-foreground text-right">
-                {format(createdAt, 'HH:mm')}
+                {format(new Date(createdAt), 'HH:mm')}
             </div>
           </div>
           <Avatar className="h-8 w-8 border-2 border-primary/50">
@@ -555,7 +555,7 @@ export default function Home() {
             id: crypto.randomUUID(), 
             role: 'system', 
             content: <StudentProgramMessage programs={studentPrograms} />,
-            createdAt: new Date() 
+            createdAt: new Date().toISOString() 
         };
 
         setMessages(currentChatId, (prev) => [...prev, systemMessage]);
@@ -572,7 +572,7 @@ export default function Home() {
         fileInputRef.current.value = '';
     }
     
-    const userMessage: Message = { id: crypto.randomUUID(), role: 'user', content: question, fileDataUri: currentFileDataUri, createdAt: new Date() };
+    const userMessage: Message = { id: crypto.randomUUID(), role: 'user', content: question, fileDataUri: currentFileDataUri, createdAt: new Date().toISOString() };
 
     setMessages(currentChatId, (prev) => [...prev, userMessage]);
     
@@ -596,7 +596,7 @@ export default function Home() {
                 role: 'assistant', 
                 content: `> ${prompt}`,
                 imageUrl: imageUrl, 
-                createdAt: new Date() 
+                createdAt: new Date().toISOString() 
             };
             setMessages(currentChatId, (prev) => [...prev, imageMessage]);
             
@@ -615,7 +615,7 @@ export default function Home() {
                 role: 'assistant', 
                 content: `Quiz on: ${topic}`, 
                 quiz: quiz,
-                createdAt: new Date() 
+                createdAt: new Date().toISOString() 
             };
             setMessages(currentChatId, (prev) => [...prev, quizMessage]);
 
@@ -626,7 +626,7 @@ export default function Home() {
               throw new Error(error);
             }
       
-            const assistantMessage: Message = { id: crypto.randomUUID(), role: 'assistant', content: answer, createdAt: new Date() };
+            const assistantMessage: Message = { id: crypto.randomUUID(), role: 'assistant', content: answer, createdAt: new Date().toISOString() };
             setMessages(currentChatId, (prev) => [...prev, assistantMessage]);
         }
 
@@ -635,7 +635,7 @@ export default function Home() {
         console.log('Request was aborted.');
       } else {
         const errorMessageContent = error instanceof Error ? error.message : 'An unknown error occurred.';
-        const errorMessage: Message = { id: crypto.randomUUID(), role: 'error', content: errorMessageContent, createdAt: new Date() };
+        const errorMessage: Message = { id: crypto.randomUUID(), role: 'error', content: errorMessageContent, createdAt: new Date().toISOString() };
         setMessages(currentChatId, (prev) => [...prev, errorMessage]);
 
         toast({
@@ -862,7 +862,7 @@ export default function Home() {
                             {messages.map((message, index) => {
                                 const isLastMessage = index === messages.length - 1;
                                 if (message.role === 'user') {
-                                    return <UserMessage key={message.id} content={message.content as string} fileDataUri={message.fileDataUri} createdAt={new Date(message.createdAt)} />;
+                                    return <UserMessage key={message.id} content={message.content as string} fileDataUri={message.fileDataUri} createdAt={message.createdAt} />;
                                 }
 
                                 if (message.role === 'assistant') {
