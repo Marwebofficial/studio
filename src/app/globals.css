@@ -67,3 +67,9 @@
     @apply bg-background text-foreground;
   }
 }
+
+@layer components {
+    .prose pre {
+        @apply bg-background/50 p-3 rounded-md;
+    }
+}
