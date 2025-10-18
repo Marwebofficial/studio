@@ -7,6 +7,7 @@ import * as z from 'zod';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { GraduationCap } from 'lucide-react';
+import { createUserWithEmailAndPassword } from 'firebase/auth';
 
 import { Button } from '@/components/ui/button';
 import {
@@ -53,7 +54,7 @@ export default function SignUpPage() {
   async function onSubmit(values: z.infer<typeof formSchema>) {
     setIsSubmitting(true);
     try {
-      await auth.createUserWithEmailAndPassword(values.email, values.password);
+      await createUserWithEmailAndPassword(auth, values.email, values.password);
       toast({
         title: 'Account Created',
         description: "You've been successfully signed up and logged in.",
