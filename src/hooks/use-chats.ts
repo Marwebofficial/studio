@@ -27,23 +27,23 @@ export function useChats(userId?: string) {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
 
-  const chatsColRef = useMemoized(() => {
+  const chatsQuery = useMemoized(() => {
     if (!userId || !firestore) return null;
-    return collection(firestore, 'users', userId, 'chats');
+    const chatsColRef = collection(firestore, 'users', userId, 'chats');
+    return query(chatsColRef, orderBy('createdAt', 'desc'));
   }, [userId, firestore]);
 
   useEffect(() => {
-    if (!chatsColRef) {
+    if (!chatsQuery) {
       setChats([]);
       setIsLoading(!userId);
       return;
     }
 
     setIsLoading(true);
-    const q = query(chatsColRef, orderBy('createdAt', 'desc'));
-
+    
     const unsubscribe = onSnapshot(
-      q,
+      chatsQuery,
       (snapshot) => {
         const loadedChats: Chat[] = snapshot.docs.map(doc => {
             const data = doc.data();
@@ -65,10 +65,10 @@ export function useChats(userId?: string) {
     );
 
     return () => unsubscribe();
-  }, [chatsColRef, userId]);
+  }, [chatsQuery, userId]);
 
   const addChat = useCallback(async () => {
-    if (!chatsColRef) return null;
+    if (!userId || !firestore) return null;
     
     const newChatData = {
       createdAt: serverTimestamp(),
@@ -76,6 +76,7 @@ export function useChats(userId?: string) {
     };
 
     try {
+        const chatsColRef = collection(firestore, 'users', userId, 'chats');
         const docRef = await addDoc(chatsColRef, newChatData);
         // We don't add to local state, we let the snapshot listener handle it
         return { ...newChatData, id: docRef.id, createdAt: new Date() } as Chat;
@@ -84,7 +85,7 @@ export function useChats(userId?: string) {
         setError(err as Error);
         return null;
     }
-  }, [chatsColRef]);
+  }, [userId, firestore]);
 
   const updateChat = useCallback((chatId: string, updates: Partial<Chat>) => {
     if (!userId) return;
