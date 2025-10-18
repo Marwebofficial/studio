@@ -4,9 +4,10 @@ import { useState, useRef, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
-import { Bot, User, Send, GraduationCap, MessageSquarePlus, Paperclip, X, Trash, FileText, Loader, Volume2, BookCopy, PlusCircle, Edit, Square } from 'lucide-react';
+import { Bot, User, Send, GraduationCap, MessageSquarePlus, Paperclip, X, Trash, FileText, Loader, Volume2, BookCopy, PlusCircle, Edit, Square, LogOut } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import Image from 'next/image';
+import Link from 'next/link';
 import { format } from 'date-fns';
 import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
@@ -63,6 +64,8 @@ import {
 import { Skeleton } from '@/components/ui/skeleton';
 import { useTypingEffect } from '@/hooks/use-typing-effect';
 import { QuizView } from '@/components/quiz';
+import { useAuth, useUser } from '@/firebase';
+import { signOut } from 'firebase/auth';
 
 const MAX_CHAT_HISTORY = 8;
 
@@ -316,6 +319,8 @@ const examplePrompts = [
 
 export default function Home() {
   const { toast } = useToast();
+  const auth = useAuth();
+  const { user, isUserLoading } = useUser();
   const [chats, setChats] = useState<Chat[]>([]);
   const [activeChatId, setActiveChatId] = useState<string | null>(null);
   const [fileDataUri, setFileDataUri] = useState<string | undefined>();
@@ -518,6 +523,8 @@ export default function Home() {
   const onSubmit = async (data: z.infer<typeof formSchema>) => {
     const question = data.question;
 
+    if (!question) return;
+
     const command = question.trim().toLowerCase();
     
     let currentChatId: string;
@@ -527,8 +534,7 @@ export default function Home() {
     if (isNewConversation) {
         currentChatId = activeChatId!;
     } else {
-        const newId = handleNewChat();
-        currentChatId = newId;
+        currentChatId = handleNewChat();
     }
 
     if (command === 'studentprogramsetting') {
@@ -711,6 +717,25 @@ export default function Home() {
     }
   };
 
+  const handleLogout = async () => {
+    try {
+        await signOut(auth);
+        // This will trigger the onAuthStateChanged listener in the FirebaseProvider
+        // and update the user state.
+        toast({
+            title: 'Logged Out',
+            description: 'You have been successfully logged out.',
+        });
+    } catch (error) {
+        console.error("Error signing out:", error);
+        toast({
+            variant: 'destructive',
+            title: 'Logout Failed',
+            description: 'An error occurred while logging out. Please try again.',
+        });
+    }
+};
+
   useEffect(() => {
     if (scrollAreaViewportRef.current) {
       scrollAreaViewportRef.current.scrollTo({
@@ -764,11 +789,34 @@ export default function Home() {
             </Sidebar>
 
             <div className="flex flex-1 flex-col h-svh bg-background/95 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-primary/20 via-accent/20 to-background bg-[length:200%_200%] animate-background-pan">
-                <header className="flex items-center gap-3 border-b bg-card/50 backdrop-blur-sm p-4 h-16">
-                    <SidebarTrigger className="md:hidden"/>
-                    <h1 className="text-lg font-semibold tracking-tight">
-                        freechat tutor
-                    </h1>
+                <header className="flex items-center justify-between gap-3 border-b bg-card/50 backdrop-blur-sm p-4 h-16">
+                    <div className="flex items-center gap-3">
+                        <SidebarTrigger className="md:hidden"/>
+                        <h1 className="text-lg font-semibold tracking-tight">
+                            freechat tutor
+                        </h1>
+                    </div>
+                    <div className="flex items-center gap-3">
+                        {isUserLoading ? (
+                            <Skeleton className="h-8 w-24" />
+                        ) : user ? (
+                            <>
+                                <span className="text-sm text-muted-foreground hidden md:inline">{user.email}</span>
+                                <Button variant="ghost" size="icon" onClick={handleLogout}>
+                                    <LogOut className="h-4 w-4" />
+                                </Button>
+                            </>
+                        ) : (
+                            <>
+                                <Button asChild variant="ghost" size="sm">
+                                    <Link href="/login">Log In</Link>
+                                </Button>
+                                <Button asChild size="sm">
+                                    <Link href="/signup">Sign Up</Link>
+                                </Button>
+                            </>
+                        )}
+                    </div>
                 </header>
                 
                 <main className="flex-1 overflow-hidden">
@@ -1059,11 +1107,3 @@ export default function Home() {
     </SidebarProvider>
   );
 }
-
-    
-
-    
-
-
-
-    
