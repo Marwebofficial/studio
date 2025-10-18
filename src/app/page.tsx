@@ -327,7 +327,7 @@ export default function Home() {
 
   const activeChat = chats.find((chat) => chat.id === activeChatId);
   const messages = activeChat?.messages ?? [];
-  const isChatsLoading = false; // Not loading from firestore anymore
+  const isChatsLoading = false; 
 
   useEffect(() => {
     // Load student programs from localStorage
@@ -342,6 +342,14 @@ export default function Home() {
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    if (!user) {
+        setChats([]);
+        setActiveChatId(null);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user]);
 
   useEffect(() => {
     if (chats.length > 0) {
@@ -938,6 +946,9 @@ export default function Home() {
                     <p className="text-xs text-center text-muted-foreground mt-3">
                         Press <kbd className="pointer-events-none inline-flex h-5 select-none items-center gap-1 rounded border bg-muted px-1.5 font-mono text-[10px] font-medium text-muted-foreground opacity-100"><span className="text-xs">⌘</span>B</kbd> to toggle the sidebar.
                     </p>
+                    <p className="text-xs text-center text-muted-foreground mt-2">
+                        <Link href="/admin" className="underline">Admin</Link>
+                    </p>
                     </div>
                 </footer>
             </div>
@@ -1101,5 +1112,7 @@ export default function Home() {
     </SidebarProvider>
   );
 }
+
+    
 
     
