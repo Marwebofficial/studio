@@ -1,0 +1,137 @@
+/**
+ * @fileoverview Firestore Security Rules for Web Chat Navigator.
+ *
+ * Core Philosophy:
+ * This ruleset enforces a strict user-ownership model for questions and answers,
+ * while allowing public read access to web sources.
+ *
+ * Data Structure:
+ * - User questions are stored under `/users/{userId}/questions/{questionId}`.
+ * - Generated answers are stored under `/users/{userId}/questions/{questionId}/answers/{answerId}`.
+ * - Web sources are stored under `/web_sources/{webSourceId}`.
+ *
+ * Key Security Decisions:
+ * - Users can only access their own questions and answers.
+ * - Web sources are publicly readable but require authentication to create, update, or delete.
+ *   The current rules do not enforce who can create/update/delete web sources,
+ *   leaving it open for authenticated users. This can be restricted further by
+ *   adding an `ownerId` field to the `WebSource` entity and updating the rules accordingly.
+ * - Listing of questions and answers is restricted to the owner.
+ *
+ * Denormalization for Authorization:
+ * - Path-based ownership is utilized, meaning the user ID is embedded in the
+ *   document path, eliminating the need for denormalized `ownerId` fields within
+ *   the question and answer documents themselves.
+ *
+ * Structural Segregation:
+ * - User-owned data (questions, answers) is segregated under `/users/{userId}`,
+ *   while public data (web sources) resides in the top-level `/web_sources` collection.
+ */
+
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    /**
+     * @description Checks if the request is made by a signed-in user.
+     * @return {boolean} True if the user is signed in, false otherwise.
+     */
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    /**
+     * @description Checks if the authenticated user ID matches the provided user ID.
+     * @param {string} userId The user ID to compare against the authenticated user's ID.
+     * @return {boolean} True if the user IDs match, false otherwise.
+     */
+    function isOwner(userId) {
+      return request.auth.uid == userId;
+    }
+
+    /**
+     * @description Checks if the authenticated user is the owner of an existing resource.
+     * @param {string} userId The user ID to compare against the authenticated user's ID.
+     * @return {boolean} True if the user IDs match and the resource exists, false otherwise.
+     */
+    function isExistingOwner(userId) {
+      return isOwner(userId) && resource != null;
+    }
+
+    /**
+     * @description Security rules for user questions.
+     * @path /users/{userId}/questions/{questionId}
+     * @allow (create) User 'user123' creates a new question with questionId 'question456' under /users/user123/questions/question456.
+     * @allow (get) User 'user123' reads question with questionId 'question456' under /users/user123/questions/question456.
+     * @allow (list) User 'user123' lists questions under /users/user123/questions.
+     * @allow (update) User 'user123' updates question with questionId 'question456' under /users/user123/questions/question456.
+     * @allow (delete) User 'user123' deletes question with questionId 'question456' under /users/user123/questions/question456.
+     * @deny (create) User 'user456' attempts to create a question under /users/user123/questions/question789 (mismatched user ID).
+     * @deny (get) User 'user456' attempts to read a question under /users/user123/questions/question789 (mismatched user ID).
+     * @deny (list) User 'user456' attempts to list questions under /users/user123/questions (mismatched user ID).
+     * @deny (update) User 'user456' attempts to update question under /users/user123/questions/question789 (mismatched user ID).
+     * @deny (delete) User 'user456' attempts to delete question under /users/user123/questions/question789 (mismatched user ID).
+     * @principle Enforces document ownership for reads and writes; only the owner can create, read, update, or delete.
+     */
+    match /users/{userId}/questions/{questionId} {
+      // Read rules
+      allow get: if isOwner(userId);
+      allow list: if isOwner(userId);
+
+      // Write rules
+      allow create: if isOwner(userId) && request.resource.data.id == questionId;
+      allow update: if isExistingOwner(userId) && resource.data.id == request.resource.data.id;
+      allow delete: if isExistingOwner(userId);
+    }
+
+    /**
+     * @description Security rules for generated answers.
+     * @path /users/{userId}/questions/{questionId}/answers/{answerId}
+     * @allow (create) User 'user123' creates a new answer with answerId 'answer789' under /users/user123/questions/question456/answers/answer789.
+     * @allow (get) User 'user123' reads answer with answerId 'answer789' under /users/user123/questions/question456/answers/answer789.
+     * @allow (list) User 'user123' lists answers under /users/user123/questions/question456/answers.
+     * @allow (update) User 'user123' updates answer with answerId 'answer789' under /users/user123/questions/question456/answers/answer789.
+     * @allow (delete) User 'user123' deletes answer with answerId 'answer789' under /users/user123/questions/question456/answers/answer789.
+     * @deny (create) User 'user456' attempts to create an answer under /users/user123/questions/question456/answers/answer012 (mismatched user ID).
+     * @deny (get) User 'user456' attempts to read an answer under /users/user123/questions/question456/answers/answer012 (mismatched user ID).
+     * @deny (list) User 'user456' attempts to list answers under /users/user123/questions/question456/answers (mismatched user ID).
+     * @deny (update) User 'user456' attempts to update answer under /users/user123/questions/question456/answers/answer012 (mismatched user ID).
+     * @deny (delete) User 'user456' attempts to delete answer under /users/user123/questions/question456/answers/answer012 (mismatched user ID).
+     * @principle Enforces document ownership for reads and writes; only the owner can create, read, update, or delete.
+     */
+    match /users/{userId}/questions/{questionId}/answers/{answerId} {
+      // Read rules
+      allow get: if isOwner(userId);
+      allow list: if isOwner(userId);
+
+      // Write rules
+      allow create: if isOwner(userId) && request.resource.data.id == answerId;
+      allow update: if isExistingOwner(userId) && resource.data.id == request.resource.data.id;
+      allow delete: if isExistingOwner(userId);
+    }
+
+    /**
+     * @description Security rules for web sources.
+     * @path /web_sources/{webSourceId}
+     * @allow (get) Any user can read any web source.
+     * @allow (list) Any user can list web sources.
+     * @allow (create) Authenticated user can create web sources.
+     * @allow (update) Authenticated user can update web sources.
+     * @allow (delete) Authenticated user can delete web sources.
+     * @deny (create) Anonymous user cannot create web sources.
+     * @deny (update) Anonymous user cannot update web sources.
+     * @deny (delete) Anonymous user cannot delete web sources.
+     * @principle Allows public read access, but requires authentication for write access.
+     */
+    match /web_sources/{webSourceId} {
+      // Read rules
+      allow get: if true;
+      allow list: if true;
+
+      // Write rules
+      allow create: if isSignedIn();
+      allow update: if isSignedIn() && resource != null;
+      allow delete: if isSignedIn() && resource != null;
+    }
+  }
+}
