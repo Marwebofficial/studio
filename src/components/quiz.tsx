@@ -2,7 +2,7 @@
 "use client";
 
 import { useState, useEffect } from 'react';
-import { type GenerateQuizOutput, type QuizQuestion as QuizQuestionType } from '@/ai/flows/generate-quiz';
+import { type GenerateQuizOutput } from '@/ai/flows/generate-quiz';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
@@ -10,8 +10,13 @@ import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
 import { CheckCircle, XCircle, Timer } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import type { QuizQuestion } from '@/lib/types';
 
-export function QuizView({ quiz }: { quiz: GenerateQuizOutput }) {
+
+export type QuizData = GenerateQuizOutput;
+
+
+export function QuizView({ quiz }: { quiz: QuizData }) {
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const [selectedAnswers, setSelectedAnswers] = useState<(number | null)[]>(new Array(quiz.questions.length).fill(null));
   const [showResults, setShowResults] = useState(false);
@@ -108,7 +113,7 @@ export function QuizView({ quiz }: { quiz: GenerateQuizOutput }) {
   );
 }
 
-function Question({ question, onAnswerSelect, selectedAnswer }: { question: QuizQuestionType, onAnswerSelect: (index: number) => void, selectedAnswer: number | null }) {
+function Question({ question, onAnswerSelect, selectedAnswer }: { question: QuizQuestion, onAnswerSelect: (index: number) => void, selectedAnswer: number | null }) {
   return (
     <div>
       <p className="font-semibold mb-4">{question.question}</p>
@@ -124,7 +129,7 @@ function Question({ question, onAnswerSelect, selectedAnswer }: { question: Quiz
   );
 }
 
-function QuizScore({ quiz, selectedAnswers, score }: { quiz: GenerateQuizOutput, selectedAnswers: (number|null)[], score: number }) {
+function QuizScore({ quiz, selectedAnswers, score }: { quiz: QuizData, selectedAnswers: (number|null)[], score: number }) {
     return (
         <Card className="max-w-xl w-full mx-auto bg-card/80 backdrop-blur-sm">
             <CardHeader>

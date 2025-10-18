@@ -4,7 +4,7 @@ import { useState, useRef, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
-import { Bot, User, Send, GraduationCap, MessageSquarePlus, Paperclip, X, Trash, FileText, Loader, Volume2, BookCopy, PlusCircle, Edit, Square, LogOut } from 'lucide-react';
+import { Bot, User, Send, GraduationCap, MessageSquarePlus, Paperclip, X, Trash, FileText, Loader, Volume2, BookCopy, Square, LogOut, Edit } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import Image from 'next/image';
 import Link from 'next/link';
@@ -63,35 +63,12 @@ import {
 } from '@/components/ui/sidebar';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useTypingEffect } from '@/hooks/use-typing-effect';
-import { QuizView } from '@/components/quiz';
+import { QuizView, type QuizData } from '@/components/quiz';
 import { useAuth, useUser } from '@/firebase';
+import { useChats } from '@/hooks/use-chats';
 import { signOut } from 'firebase/auth';
+import type { Message, Chat } from '@/lib/types';
 
-const MAX_CHAT_HISTORY = 8;
-
-type Message = {
-  id: string;
-  role: 'user' | 'assistant' | 'error' | 'system';
-  content: string | React.ReactNode;
-  fileDataUri?: string;
-  imageUrl?: string;
-  createdAt: Date;
-};
-
-type Chat = {
-  id: string;
-  messages: Message[];
-  createdAt: Date;
-};
-
-type StudentProgram = {
-    id: string;
-    title: string;
-    content?: string;
-    fileDataUri?: string;
-    fileName?: string;
-    createdAt: Date;
-};
 
 const formSchema = z.object({
   question: z.string().trim().min(1, 'Please enter a question.'),
@@ -140,14 +117,15 @@ const UserMessage = ({ content, fileDataUri, createdAt }: { content: string, fil
 }
   
 
-const AssistantMessage = ({ content, imageUrl, isLastMessage }: { content: React.ReactNode | string, imageUrl?: string, isLastMessage: boolean }) => {
+const AssistantMessage = ({ message, isLastMessage }: { message: Message, isLastMessage: boolean }) => {
     const [audio, setAudio] = useState<HTMLAudioElement | null>(null);
     const [isPlaying, setIsPlaying] = useState(false);
     const [isGenerating, setIsGenerating] = useState(false);
     const [typingStopped, setTypingStopped] = useState(false);
     
+    const content = message.content;
     const isStringContent = typeof content === 'string';
-    const typedContent = useTypingEffect(isStringContent ? content : '', isLastMessage ? 5 : 0);
+    const typedContent = useTypingEffect(isStringContent ? content : '', isLastMessage ? 20 : 0);
     
     const isTyping = isLastMessage && isStringContent && typedContent.length < content.length && !typingStopped;
 
@@ -186,6 +164,15 @@ const AssistantMessage = ({ content, imageUrl, isLastMessage }: { content: React
         }
     };
     
+    let renderContent: React.ReactNode;
+    if (message.quiz) {
+      renderContent = <QuizView quiz={message.quiz} />;
+    } else if (isStringContent) {
+      renderContent = <ReactMarkdown remarkPlugins={[[remarkMath, {singleDollarTextMath: true}]]} rehypePlugins={[rehypeKatex]}>{displayedContent as string}</ReactMarkdown>;
+    } else {
+      renderContent = message.content;
+    }
+
       return (
         <div className="flex items-start gap-3">
           <Avatar className="h-8 w-8 border-2 border-accent/50">
@@ -195,9 +182,9 @@ const AssistantMessage = ({ content, imageUrl, isLastMessage }: { content: React
           </Avatar>
           <div className="max-w-xl w-full space-y-2">
               <div className="bg-accent/10 p-3 rounded-xl rounded-bl-none border border-accent/20 group relative">
-                  {imageUrl && <Image src={imageUrl} alt={typeof content === 'string' ? content : 'Generated image'} width={512} height={512} className="rounded-lg mb-2" />}
+                  {message.imageUrl && <Image src={message.imageUrl} alt={typeof content === 'string' ? content : 'Generated image'} width={512} height={512} className="rounded-lg mb-2" />}
                   <div className="prose prose-sm prose-invert max-w-none text-foreground pb-6">
-                      {isStringContent ? <ReactMarkdown remarkPlugins={[[remarkMath, {singleDollarTextMath: true}]]} rehypePlugins={[rehypeKatex]}>{displayedContent as string}</ReactMarkdown> : content}
+                      {renderContent}
                   </div>
                   <div className="absolute bottom-1 right-1 flex items-center">
                     {isTyping && (
@@ -228,7 +215,7 @@ const AssistantMessage = ({ content, imageUrl, isLastMessage }: { content: React
       );
     };
   
-const StudentProgramMessage = ({ programs }: { programs: StudentProgram[] }) => {
+const StudentProgramMessage = ({ programs }: { programs: any[] }) => {
     return (
         <div className="flex items-start gap-3">
             <Avatar className="h-8 w-8 border-2 border-accent/50">
@@ -321,7 +308,7 @@ export default function Home() {
   const { toast } = useToast();
   const auth = useAuth();
   const { user, isUserLoading } = useUser();
-  const [chats, setChats] = useState<Chat[]>([]);
+  const { chats, addChat, updateChat, deleteChat, isLoading: isChatsLoading } = useChats(user?.uid);
   const [activeChatId, setActiveChatId] = useState<string | null>(null);
   const [fileDataUri, setFileDataUri] = useState<string | undefined>();
   const [fileName, setFileName] = useState<string | undefined>();
@@ -332,22 +319,15 @@ export default function Home() {
   const [chatToDelete, setChatToDelete] = useState<string | null>(null);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isEditProgramOpen, setIsEditProgramOpen] = useState(false);
-  const [programToEdit, setProgramToEdit] = useState<StudentProgram | null>(null);
+  const [programToEdit, setProgramToEdit] = useState<any | null>(null);
   const [programToDelete, setProgramToDelete] = useState<string | null>(null);
-  const [studentPrograms, setStudentPrograms] = useState<StudentProgram[]>([]);
+  const [studentPrograms, setStudentPrograms] = useState<any[]>([]);
   const abortControllerRef = useRef<AbortController | null>(null);
 
   const activeChat = chats.find((chat) => chat.id === activeChatId);
   const messages = activeChat?.messages ?? [];
 
   useEffect(() => {
-    // Load chats from localStorage
-    const savedChats = localStorage.getItem('chats');
-    const loadedChats = savedChats ? JSON.parse(savedChats, (key, value) => {
-        if (key === 'createdAt') return new Date(value);
-        return value;
-    }) : [];
-
     // Load student programs from localStorage
     const savedPrograms = localStorage.getItem('studentPrograms');
     const loadedPrograms = savedPrograms ? JSON.parse(savedPrograms, (key, value) => {
@@ -355,50 +335,43 @@ export default function Home() {
         return value;
     }) : [];
     setStudentPrograms(loadedPrograms);
-
-    // Create a new chat and set it as active
-    const newChat: Chat = {
-        id: crypto.randomUUID(),
-        messages: [],
-        createdAt: new Date(),
-    };
-
-    const updatedChats = [newChat, ...loadedChats];
-    setChats(updatedChats);
-    setActiveChatId(newChat.id);
-
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
-    // Save chats to localStorage whenever they change, but don't save empty new chats
-    const chatsToSave = chats.filter(chat => chat.messages.length > 0);
-    if (chatsToSave.length > 0) {
-      localStorage.setItem('chats', JSON.stringify(chatsToSave));
-    } else {
-      localStorage.removeItem('chats');
+    if (!isChatsLoading && user) {
+        if (chats.length > 0 && !activeChatId) {
+            setActiveChatId(chats[0].id);
+        } else if (chats.length === 0) {
+            handleNewChat();
+        }
     }
-  }, [chats]);
+    if (!user) {
+        setChats([]);
+        setActiveChatId(null);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isChatsLoading, chats, user, activeChatId]);
+
 
   useEffect(() => {
     localStorage.setItem('studentPrograms', JSON.stringify(studentPrograms));
   }, [studentPrograms]);
   
-  const handleNewChat = () => {
-    const newChat: Chat = {
-      id: crypto.randomUUID(),
-      messages: [],
-      createdAt: new Date(),
-    };
-    setChats(prev => {
-        const updatedChats = [newChat, ...prev];
-        if (updatedChats.length > MAX_CHAT_HISTORY) {
-            return updatedChats.slice(0, MAX_CHAT_HISTORY);
-        }
-        return updatedChats;
-    });
-    setActiveChatId(newChat.id);
-    return newChat.id;
+  const handleNewChat = async () => {
+    if (!user) {
+        toast({
+            title: 'Please log in',
+            description: 'You need to be logged in to start a new chat.',
+            variant: 'destructive',
+        });
+        return;
+    }
+    const newChat = await addChat();
+    if (newChat) {
+      setActiveChatId(newChat.id);
+      return newChat.id;
+    }
+    return null;
   };
 
   const form = useForm<z.infer<typeof formSchema>>({
@@ -416,17 +389,21 @@ export default function Home() {
     },
   });
 
-  const handlePrompt = (prompt: string) => {
+  const handlePrompt = async (prompt: string) => {
     let newChatId = activeChatId;
     if (activeChat && activeChat.messages.length > 0) {
-        newChatId = handleNewChat();
+        const createdChatId = await handleNewChat();
+        if (!createdChatId) return;
+        newChatId = createdChatId;
     }
     // Use a timeout to ensure the state update for the new chat is processed
     // before we set and submit the form.
     setTimeout(() => {
-        setActiveChatId(newChatId);
-        form.setValue('question', prompt);
-        form.handleSubmit((data) => onSubmit(data))();
+        if (newChatId) {
+            setActiveChatId(newChatId);
+            form.setValue('question', prompt);
+            form.handleSubmit((data) => onSubmit(data))();
+        }
     }, 0);
   };
 
@@ -462,7 +439,7 @@ export default function Home() {
 
     if (programToEdit) {
         // Editing existing program
-        const updatedProgram: StudentProgram = {
+        const updatedProgram = {
             ...programToEdit,
             title: data.title,
             content: data.content,
@@ -477,7 +454,7 @@ export default function Home() {
 
     } else {
         // Adding new program
-        const newProgram: StudentProgram = {
+        const newProgram = {
             id: crypto.randomUUID(),
             title: data.title,
             content: data.content,
@@ -500,7 +477,7 @@ export default function Home() {
     setProgramToEdit(null);
   };
 
-  const handleEditProgram = (program: StudentProgram) => {
+  const handleEditProgram = (program: any) => {
     setProgramToEdit(program);
     settingsForm.setValue('title', program.title);
     settingsForm.setValue('content', program.content || '');
@@ -520,10 +497,29 @@ export default function Home() {
     });
   };
 
+  const setMessages = (chatId: string, newMessages: Message[] | ((prevMessages: Message[]) => Message[])) => {
+    const chat = chats.find(c => c.id === chatId);
+    if (!chat) return;
+
+    const finalMessages = typeof newMessages === 'function' ? newMessages(chat.messages) : newMessages;
+
+    updateChat(chatId, { messages: finalMessages });
+  };
+
+
   const onSubmit = async (data: z.infer<typeof formSchema>) => {
     const question = data.question;
 
     if (!question) return;
+
+    if (!user) {
+        toast({
+            title: 'Please log in',
+            description: 'You need to be logged in to ask a question.',
+            variant: 'destructive'
+        });
+        return;
+    }
 
     const command = question.trim().toLowerCase();
     
@@ -534,7 +530,9 @@ export default function Home() {
     if (isNewConversation) {
         currentChatId = activeChatId!;
     } else {
-        currentChatId = handleNewChat();
+        const newChatId = await handleNewChat();
+        if (!newChatId) return;
+        currentChatId = newChatId;
     }
 
     if (command === 'studentprogramsetting') {
@@ -556,13 +554,11 @@ export default function Home() {
         const systemMessage: Message = { 
             id: crypto.randomUUID(), 
             role: 'system', 
-            content: <StudentProgramMessage programs={studentPrograms} />, 
+            content: <StudentProgramMessage programs={studentPrograms} />,
             createdAt: new Date() 
         };
 
-        setChats(prev => prev.map(chat =>
-            chat.id === currentChatId ? { ...chat, messages: [...chat.messages, systemMessage] } : chat
-        ));
+        setMessages(currentChatId, (prev) => [...prev, systemMessage]);
         form.reset();
         return;
     }
@@ -578,11 +574,7 @@ export default function Home() {
     
     const userMessage: Message = { id: crypto.randomUUID(), role: 'user', content: question, fileDataUri: currentFileDataUri, createdAt: new Date() };
 
-    setChats(prev => prev.map(chat => 
-      chat.id === currentChatId
-        ? { ...chat, messages: [...chat.messages, userMessage] } 
-        : chat
-    ));
+    setMessages(currentChatId, (prev) => [...prev, userMessage]);
     
     setIsPending(true);
     abortControllerRef.current = new AbortController();
@@ -606,12 +598,8 @@ export default function Home() {
                 imageUrl: imageUrl, 
                 createdAt: new Date() 
             };
+            setMessages(currentChatId, (prev) => [...prev, imageMessage]);
             
-            setChats(prev => prev.map(chat => 
-                chat.id === currentChatId 
-                  ? { ...chat, messages: [...chat.messages, imageMessage] } 
-                  : chat
-            ));
         } else if (question.startsWith('/quiz')) {
             const topic = question.replace('/quiz', '').trim();
             if (!topic) {
@@ -625,15 +613,11 @@ export default function Home() {
             const quizMessage: Message = { 
                 id: crypto.randomUUID(), 
                 role: 'assistant', 
-                content: <QuizView quiz={quiz} />, 
+                content: `Quiz on: ${topic}`, 
+                quiz: quiz,
                 createdAt: new Date() 
             };
-            
-            setChats(prev => prev.map(chat => 
-                chat.id === currentChatId 
-                  ? { ...chat, messages: [...chat.messages, quizMessage] } 
-                  : chat
-            ));
+            setMessages(currentChatId, (prev) => [...prev, quizMessage]);
 
         } else {
             const { answer, error } = await getAnswer(question, currentFileDataUri, signal);
@@ -643,16 +627,7 @@ export default function Home() {
             }
       
             const assistantMessage: Message = { id: crypto.randomUUID(), role: 'assistant', content: answer, createdAt: new Date() };
-            
-            setChats(prev => prev.map(chat => {
-              if (chat.id === currentChatId) {
-                return {
-                  ...chat,
-                  messages: [...chat.messages, assistantMessage]
-                };
-              }
-              return chat;
-            }));
+            setMessages(currentChatId, (prev) => [...prev, assistantMessage]);
         }
 
     } catch (error) {
@@ -661,16 +636,7 @@ export default function Home() {
       } else {
         const errorMessageContent = error instanceof Error ? error.message : 'An unknown error occurred.';
         const errorMessage: Message = { id: crypto.randomUUID(), role: 'error', content: errorMessageContent, createdAt: new Date() };
-
-        setChats(prev => prev.map(chat => {
-          if (chat.id === currentChatId) {
-            return {
-              ...chat,
-              messages: [...chat.messages, errorMessage]
-            }
-          }
-          return chat;
-        }));
+        setMessages(currentChatId, (prev) => [...prev, errorMessage]);
 
         toast({
           variant: 'destructive',
@@ -704,15 +670,15 @@ export default function Home() {
     return 'New Chat';
   }
   
-  const handleDeleteChat = (chatIdToDelete: string) => {
-    const newChats = chats.filter(chat => chat.id !== chatIdToDelete);
-    setChats(newChats);
+  const handleDeleteChat = async (chatIdToDelete: string) => {
+    await deleteChat(chatIdToDelete);
 
     if (activeChatId === chatIdToDelete) {
-        if (newChats.length > 0) {
-            setActiveChatId(newChats[0].id);
+        const remainingChats = chats.filter(chat => chat.id !== chatIdToDelete);
+        if (remainingChats.length > 0) {
+            setActiveChatId(remainingChats[0].id);
         } else {
-            handleNewChat();
+            await handleNewChat();
         }
     }
   };
@@ -720,12 +686,11 @@ export default function Home() {
   const handleLogout = async () => {
     try {
         await signOut(auth);
-        // This will trigger the onAuthStateChanged listener in the FirebaseProvider
-        // and update the user state.
         toast({
             title: 'Logged Out',
             description: 'You have been successfully logged out.',
         });
+        setActiveChatId(null);
     } catch (error) {
         console.error("Error signing out:", error);
         toast({
@@ -747,43 +712,77 @@ export default function Home() {
   
   const isImageFile = fileDataUri?.startsWith('data:image');
 
+  const renderSidebarContent = () => {
+    if (isUserLoading || (user && isChatsLoading)) {
+      return (
+        <div className="flex flex-col gap-1 pr-2">
+          {[...Array(3)].map((_, i) => (
+            <Skeleton key={i} className="h-8 w-full" />
+          ))}
+        </div>
+      );
+    }
+    
+    if (!user) {
+        return (
+            <div className="text-center text-sm text-muted-foreground p-4">
+                Please log in to see your chat history.
+            </div>
+        )
+    }
+
+    const displayedChats = chats.filter(c => c.messages.length > 0);
+
+    if (displayedChats.length === 0) {
+        return (
+            <div className="text-center text-sm text-muted-foreground p-4">
+                No chats yet. Start a new conversation!
+            </div>
+        )
+    }
+
+
+    return (
+      <div className="flex flex-col gap-1 pr-2">
+        {displayedChats.map(chat => (
+          <div key={chat.id} className="group relative">
+            <Button
+              variant={activeChatId === chat.id ? 'secondary' : 'ghost'}
+              className="w-full justify-start h-8 text-sm truncate pr-8"
+              onClick={() => setActiveChatId(chat.id)}
+            >
+              {getChatTitle(chat)}
+            </Button>
+            <div className="absolute right-0 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity">
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7"
+                onClick={() => setChatToDelete(chat.id)}
+              >
+                <Trash className="h-4 w-4" />
+              </Button>
+            </div>
+          </div>
+        ))}
+      </div>
+    );
+  };
+
+
   return (
     <SidebarProvider>
         <div className="flex h-svh w-full bg-background">
             <Sidebar collapsible="icon" className="border-r-0 md:bg-card/50 backdrop-blur-sm md:border-r">
                 <SidebarHeader>
-                  <Button variant="ghost" className="w-full justify-start h-10" onClick={handleNewChat}>
+                  <Button variant="ghost" className="w-full justify-start h-10" onClick={handleNewChat} disabled={!user}>
                     <MessageSquarePlus className="mr-2" />
                     New Chat
                   </Button>
                 </SidebarHeader>
                 <SidebarContent className="p-2">
                     <ScrollArea className="h-full">
-                        <div className="flex flex-col gap-1 pr-2">
-                            {chats.filter(c => c.messages.length > 0).map(chat => (
-                                <div key={chat.id} className="group relative">
-                                  <Button
-                                      variant={activeChatId === chat.id ? 'secondary' : 'ghost'}
-                                      className="w-full justify-start h-8 text-sm truncate pr-8"
-                                      onClick={() => {
-                                        setActiveChatId(chat.id);
-                                      }}
-                                  >
-                                      {getChatTitle(chat)}
-                                  </Button>
-                                  <div className="absolute right-0 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity">
-                                      <Button
-                                        variant="ghost"
-                                        size="icon"
-                                        className="h-7 w-7"
-                                        onClick={() => setChatToDelete(chat.id)}
-                                      >
-                                        <Trash className="h-4 w-4" />
-                                      </Button>
-                                  </div>
-                                </div>
-                            ))}
-                        </div>
+                        {renderSidebarContent()}
                     </ScrollArea>
                 </SidebarContent>
             </Sidebar>
@@ -844,11 +843,17 @@ export default function Home() {
                                                     variant="outline"
                                                     className="text-left justify-start h-auto py-3 px-4 font-normal bg-card/50 hover:bg-card"
                                                     onClick={() => handlePrompt(prompt)}
+                                                    disabled={!user}
                                                 >
                                                     {prompt}
                                                 </Button>
                                             ))}
                                         </div>
+                                         {!user && !isUserLoading && (
+                                            <p className="mt-4 text-sm text-muted-foreground">
+                                                <Link href="/login" className="underline font-semibold">Log in</Link> to start chatting.
+                                            </p>
+                                        )}
                                     </CardContent>
                                 </Card>
                             </div>
@@ -857,17 +862,17 @@ export default function Home() {
                             {messages.map((message, index) => {
                                 const isLastMessage = index === messages.length - 1;
                                 if (message.role === 'user') {
-                                    return <UserMessage key={message.id} content={message.content as string} fileDataUri={message.fileDataUri} createdAt={message.createdAt} />;
+                                    return <UserMessage key={message.id} content={message.content as string} fileDataUri={message.fileDataUri} createdAt={new Date(message.createdAt)} />;
                                 }
 
                                 if (message.role === 'assistant') {
-                                    return <AssistantMessage key={message.id} content={message.content} imageUrl={message.imageUrl} isLastMessage={isLastMessage} />;
+                                    return <AssistantMessage key={message.id} message={message} isLastMessage={isLastMessage} />;
                                 }
                                 if (message.role === 'error') {
                                     return <ErrorMessage key={message.id} content={message.content as string} />;
                                 }
                                 if (message.role === 'system') {
-                                    return message.content;
+                                    return <div key={message.id}>{message.content}</div>;
                                 }
                                 return null;
                             })}
@@ -898,16 +903,16 @@ export default function Home() {
                                   <Input
                                       placeholder="Ask me anything, or type /imagine or /quiz..."
                                       autoComplete="off"
-                                      disabled={isPending}
+                                      disabled={isPending || !user}
                                       {...form.register('question')}
                                       className="pr-20 pl-12 h-12 bg-input rounded-full"
                                   />
                               </FormControl>
-                              <Button type="button" size="icon" variant="ghost" className="absolute top-1/2 left-2 -translate-y-1/2 h-9 w-9 rounded-full" onClick={() => fileInputRef.current?.click()}>
+                              <Button type="button" size="icon" variant="ghost" className="absolute top-1/2 left-2 -translate-y-1/2 h-9 w-9 rounded-full" onClick={() => fileInputRef.current?.click()} disabled={!user}>
                                   <Paperclip className="h-4 w-4" />
                                   <span className="sr-only">Attach file</span>
                               </Button>
-                              <Button type="submit" size="icon" disabled={isPending} className="absolute top-1/2 right-2 -translate-y-1/2 h-9 w-9 rounded-full bg-accent hover:bg-accent/90">
+                              <Button type="submit" size="icon" disabled={isPending || !user} className="absolute top-1/2 right-2 -translate-y-1/2 h-9 w-9 rounded-full bg-accent hover:bg-accent/90">
                                   <Send className="h-4 w-4" />
                                   <span className="sr-only">Send</span>
                               </Button>
