@@ -8,6 +8,7 @@ export type Message = {
     fileDataUri?: string;
     imageUrl?: string;
     quiz?: GenerateQuizOutput;
+    programs?: any[]; // For student program system messages
     createdAt: string;
 };
   
@@ -23,3 +24,4 @@ export type QuizQuestion = {
     answer: number;
     explanation: string;
 };
+

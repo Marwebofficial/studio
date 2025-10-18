@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
@@ -146,7 +147,7 @@ const AssistantMessage = ({ message, isLastMessage }: { message: Message, isLast
         }
   
         setIsGenerating(true);
-        const { media, error } = await speak(content);
+        const { media, error } = await speak(content as string);
         setIsGenerating(false);
   
         if (error) {
@@ -197,7 +198,7 @@ const AssistantMessage = ({ message, isLastMessage }: { message: Message, isLast
                           <Square className="h-4 w-4" />
                       </Button>
                     )}
-                    {isStringContent && content.length > 0 && (
+                    {isStringContent && (content as string).length > 0 && (
                       <Button 
                           size="icon" 
                           variant="ghost" 
@@ -551,11 +552,12 @@ export default function Home() {
     }
 
     if (command === 'studentprogram') {
-        const systemMessage: Message = { 
-            id: crypto.randomUUID(), 
-            role: 'system', 
-            content: <StudentProgramMessage programs={studentPrograms} />,
-            createdAt: new Date().toISOString() 
+        const systemMessage: Message = {
+            id: crypto.randomUUID(),
+            role: 'system',
+            content: 'Displaying student programs.',
+            programs: studentPrograms,
+            createdAt: new Date().toISOString(),
         };
 
         setMessages(currentChatId, (prev) => [...prev, systemMessage]);
@@ -871,8 +873,8 @@ export default function Home() {
                                 if (message.role === 'error') {
                                     return <ErrorMessage key={message.id} content={message.content as string} />;
                                 }
-                                if (message.role === 'system') {
-                                    return <div key={message.id}>{message.content}</div>;
+                                if (message.role === 'system' && message.programs) {
+                                    return <StudentProgramMessage key={message.id} programs={message.programs} />;
                                 }
                                 return null;
                             })}
