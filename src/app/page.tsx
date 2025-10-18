@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
@@ -337,18 +338,8 @@ export default function Home() {
     }) : [];
     setStudentPrograms(loadedPrograms);
 
-    const savedChats = localStorage.getItem('chats');
-    if (savedChats) {
-        const loadedChats = JSON.parse(savedChats) as Chat[];
-        setChats(loadedChats);
-        if (loadedChats.length > 0) {
-            setActiveChatId(localStorage.getItem('activeChatId') || loadedChats[0].id)
-        } else {
-            handleNewChat();
-        }
-    } else {
-        handleNewChat();
-    }
+    handleNewChat();
+
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
