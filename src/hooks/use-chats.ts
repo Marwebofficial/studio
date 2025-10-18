@@ -5,20 +5,16 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   collection,
   query,
-  where,
   orderBy,
   addDoc,
-  setDoc,
   deleteDoc,
   doc,
   serverTimestamp,
-  getDocs,
   onSnapshot,
 } from 'firebase/firestore';
-import { useFirestore } from '@/firebase';
-import { useMemoized } from '@/hooks/use-memoized';
-import type { Chat, Message } from '@/lib/types';
-import { setDocumentNonBlocking, addDocumentNonBlocking, deleteDocumentNonBlocking } from '@/firebase';
+import { useFirestore, useMemoFirebase } from '@/firebase';
+import type { Chat } from '@/lib/types';
+import { setDocumentNonBlocking, deleteDocumentNonBlocking } from '@/firebase';
 
 
 export function useChats(userId?: string) {
@@ -27,7 +23,7 @@ export function useChats(userId?: string) {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
 
-  const chatsQuery = useMemoized(() => {
+  const chatsQuery = useMemoFirebase(() => {
     if (!userId || !firestore) return null;
     const chatsColRef = collection(firestore, 'users', userId, 'chats');
     return query(chatsColRef, orderBy('createdAt', 'desc'));
