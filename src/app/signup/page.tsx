@@ -29,7 +29,7 @@ import {
 } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
 import { useToast } from '@/hooks/use-toast';
-import { useAuth, useFirestore } from '@/firebase';
+import { useAuth, useFirestore, errorEmitter, FirestorePermissionError } from '@/firebase';
 import { FirebaseError } from 'firebase/app';
 
 const formSchema = z.object({
@@ -70,11 +70,27 @@ export default function SignUpPage() {
       if (values.adminCode) {
         if (values.adminCode === ADMIN_CODE) {
           const adminRef = doc(firestore, 'admins', userCredential.user.uid);
-          await setDoc(adminRef, { isAdmin: true });
-           toast({
-            title: 'Admin Account Created',
-            description: "You've been successfully signed up as an admin.",
-          });
+          const adminData = { isAdmin: true };
+          
+          // Use non-blocking setDoc with contextual error handling
+          setDoc(adminRef, adminData)
+            .then(() => {
+              toast({
+                title: 'Admin Account Created',
+                description: "You've been successfully signed up as an admin.",
+              });
+              router.push('/');
+            })
+            .catch((serverError) => {
+              // This is the new error handling part
+              const permissionError = new FirestorePermissionError({
+                path: adminRef.path,
+                operation: 'create',
+                requestResourceData: adminData,
+              });
+              errorEmitter.emit('permission-error', permissionError);
+            });
+          return; // Exit early as the .then() will handle redirection
         } else {
             toast({
                 variant: 'destructive',
@@ -116,7 +132,10 @@ export default function SignUpPage() {
         description: errorMessage,
       });
     } finally {
-        setIsSubmitting(false);
+        // Only set isSubmitting to false if we are not waiting for the async setDoc to complete
+        if (!values.adminCode || values.adminCode !== ADMIN_CODE) {
+            setIsSubmitting(false);
+        }
     }
   }
 
