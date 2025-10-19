@@ -8,6 +8,8 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { GraduationCap } from 'lucide-react';
 import { signInWithEmailAndPassword } from 'firebase/auth';
+import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
+
 
 import { Button } from '@/components/ui/button';
 import {
@@ -27,7 +29,7 @@ import {
 } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
 import { useToast } from '@/hooks/use-toast';
-import { useAuth } from '@/firebase';
+import { useAuth, useFirestore } from '@/firebase';
 import { FirebaseError } from 'firebase/app';
 
 
@@ -40,6 +42,7 @@ export default function LoginPage() {
   const router = useRouter();
   const { toast } = useToast();
   const auth = useAuth();
+  const firestore = useFirestore();
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const form = useForm<z.infer<typeof formSchema>>({
@@ -53,7 +56,17 @@ export default function LoginPage() {
   async function onSubmit(values: z.infer<typeof formSchema>) {
     setIsSubmitting(true);
     try {
-      await signInWithEmailAndPassword(auth, values.email, values.password);
+      const userCredential = await signInWithEmailAndPassword(auth, values.email, values.password);
+      
+      // Log activity
+      const activityLogsRef = collection(firestore, 'activity_logs');
+      await addDoc(activityLogsRef, {
+        userId: userCredential.user.uid,
+        userEmail: userCredential.user.email,
+        activityType: 'login',
+        timestamp: serverTimestamp(),
+      });
+      
       toast({
         title: 'Login Successful',
         description: "Welcome back! You're now logged in.",

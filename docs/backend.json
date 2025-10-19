@@ -73,6 +73,37 @@
       "required": [
         "isAdmin"
       ]
+    },
+    "ActivityLog": {
+      "title": "Activity Log",
+      "description": "Represents a single user activity event.",
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string",
+          "description": "The ID of the user who performed the activity."
+        },
+        "userEmail": {
+          "type": "string",
+          "description": "The email of the user."
+        },
+        "activityType": {
+          "type": "string",
+          "enum": ["signup", "login"],
+          "description": "The type of activity."
+        },
+        "timestamp": {
+          "type": "string",
+          "format": "date-time",
+          "description": "The time the activity occurred."
+        }
+      },
+      "required": [
+        "userId",
+        "userEmail",
+        "activityType",
+        "timestamp"
+      ]
     }
   },
   "auth": {
@@ -93,6 +124,12 @@
         "$ref": "#/entities/Admin"
       },
       "description": "Stores admin user information."
+    },
+    "/activity_logs/{logId}": {
+      "schema": {
+        "$ref": "#/entities/ActivityLog"
+      },
+      "description": "Stores user activity logs for admin monitoring."
     }
   }
 }

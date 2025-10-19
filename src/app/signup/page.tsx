@@ -9,7 +9,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { GraduationCap } from 'lucide-react';
 import { createUserWithEmailAndPassword } from 'firebase/auth';
-import { doc, setDoc } from 'firebase/firestore';
+import { doc, setDoc, collection, addDoc, serverTimestamp } from 'firebase/firestore';
 
 import { Button } from '@/components/ui/button';
 import {
@@ -66,46 +66,45 @@ export default function SignUpPage() {
         values.email,
         values.password
       );
+
+      const user = userCredential.user;
+      
+      // Log activity
+      const activityLogsRef = collection(firestore, 'activity_logs');
+      await addDoc(activityLogsRef, {
+        userId: user.uid,
+        userEmail: user.email,
+        activityType: 'signup',
+        timestamp: serverTimestamp(),
+      });
       
       if (values.adminCode) {
         if (values.adminCode === ADMIN_CODE) {
-          const adminRef = doc(firestore, 'admins', userCredential.user.uid);
+          const adminRef = doc(firestore, 'admins', user.uid);
           const adminData = { isAdmin: true };
           
-          // Use non-blocking setDoc with contextual error handling
-          setDoc(adminRef, adminData)
-            .then(() => {
-              toast({
-                title: 'Admin Account Created',
-                description: "You've been successfully signed up as an admin.",
-              });
-              router.push('/');
-            })
-            .catch((serverError) => {
-              // This is the new error handling part
-              const permissionError = new FirestorePermissionError({
-                path: adminRef.path,
-                operation: 'create',
-                requestResourceData: adminData,
-              });
-              errorEmitter.emit('permission-error', permissionError);
-            });
-          return; // Exit early as the .then() will handle redirection
+          await setDoc(adminRef, adminData);
+
+          toast({
+            title: 'Admin Account Created',
+            description: "You've been successfully signed up as an admin.",
+          });
+          router.push('/');
         } else {
             toast({
                 variant: 'destructive',
                 title: 'Invalid Admin Code',
                 description: "Your account was created, but the admin code was incorrect.",
             });
+            router.push('/');
         }
       } else {
          toast({
             title: 'Account Created',
             description: "You've been successfully signed up and logged in.",
         });
+        router.push('/');
       }
-
-      router.push('/');
     } catch (error) {
       console.error(error);
       let errorMessage = 'An unexpected error occurred. Please try again.';
@@ -132,10 +131,7 @@ export default function SignUpPage() {
         description: errorMessage,
       });
     } finally {
-        // Only set isSubmitting to false if we are not waiting for the async setDoc to complete
-        if (!values.adminCode || values.adminCode !== ADMIN_CODE) {
-            setIsSubmitting(false);
-        }
+        setIsSubmitting(false);
     }
   }
 

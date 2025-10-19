@@ -1,8 +1,12 @@
 
 'use client';
 
-import { ShieldCheck, LayoutDashboard, LogOut } from 'lucide-react';
+import { ShieldCheck, LayoutDashboard, LogOut, UserPlus, LogIn as LogInIcon, Clock } from 'lucide-react';
 import Link from 'next/link';
+import { useMemo } from 'react';
+import { collection, query, orderBy, limit, type DocumentData, type CollectionReference } from 'firebase/firestore';
+import { formatDistanceToNow } from 'date-fns';
+
 
 import { Button } from '@/components/ui/button';
 import {
@@ -12,13 +16,34 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card';
-
-import { useUser } from '@/firebase';
+import {
+    Table,
+    TableBody,
+    TableCell,
+    TableHead,
+    TableHeader,
+    TableRow,
+  } from "@/components/ui/table"
+import { useUser, useFirestore, useCollection, useMemoFirebase } from '@/firebase';
 import { signOut } from 'firebase/auth';
 import { useAuth } from '@/firebase';
+import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { Skeleton } from '@/components/ui/skeleton';
 
 const AdminDashboard = () => {
     const auth = useAuth();
+    const firestore = useFirestore();
+
+    const activityLogsRef = useMemoFirebase(() => {
+        return collection(firestore, 'activity_logs') as CollectionReference<DocumentData>;
+    }, [firestore]);
+
+    const activityLogsQuery = useMemoFirebase(() => {
+        if (!activityLogsRef) return null;
+        return query(activityLogsRef, orderBy('timestamp', 'desc'), limit(20));
+    }, [activityLogsRef]);
+
+    const { data: activityLogs, isLoading: isLoadingLogs } = useCollection(activityLogsQuery);
 
     const handleLogout = async () => {
         await signOut(auth);
@@ -43,13 +68,77 @@ const AdminDashboard = () => {
             <CardHeader>
                 <CardTitle>Site Activity</CardTitle>
                 <CardDescription>
-                    This is where site activity monitoring will be displayed.
+                    A real-time log of recent user activity on the site.
                 </CardDescription>
             </CardHeader>
             <CardContent>
-                <div className="text-center text-muted-foreground py-12">
-                    <p>Activity monitoring components will be added here in a future update.</p>
-                </div>
+                <Table>
+                    <TableHeader>
+                        <TableRow>
+                        <TableHead>User</TableHead>
+                        <TableHead>Activity</TableHead>
+                        <TableHead className="text-right">Time</TableHead>
+                        </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                        {isLoadingLogs && [...Array(5)].map((_, i) => (
+                            <TableRow key={i}>
+                                <TableCell>
+                                    <div className="flex items-center gap-3">
+                                        <Skeleton className="h-10 w-10 rounded-full" />
+                                        <div className="space-y-1">
+                                            <Skeleton className="h-4 w-24" />
+                                            <Skeleton className="h-3 w-32" />
+                                        </div>
+                                    </div>
+                                </TableCell>
+                                <TableCell>
+                                    <Skeleton className="h-4 w-16" />
+                                </TableCell>
+                                <TableCell className="text-right">
+                                    <Skeleton className="h-4 w-20 ml-auto" />
+                                </TableCell>
+                            </TableRow>
+                        ))}
+                        {activityLogs && activityLogs.length > 0 ? activityLogs.map(log => (
+                            <TableRow key={log.id}>
+                                <TableCell>
+                                    <div className="flex items-center gap-3">
+                                        <Avatar>
+                                            <AvatarFallback>
+                                                {log.userEmail.substring(0, 2).toUpperCase()}
+                                            </AvatarFallback>
+                                        </Avatar>
+                                        <div>
+                                            <p className="font-medium">{log.userEmail}</p>
+                                        </div>
+                                    </div>
+                                </TableCell>
+                                <TableCell>
+                                    <div className="flex items-center gap-2">
+                                        {log.activityType === 'signup' && <UserPlus className="h-4 w-4 text-green-500" />}
+                                        {log.activityType === 'login' && <LogInIcon className="h-4 w-4 text-blue-500" />}
+                                        <span className="capitalize">{log.activityType}</span>
+                                    </div>
+                                </TableCell>
+                                <TableCell className="text-right text-muted-foreground">
+                                    <div className="flex items-center justify-end gap-2">
+                                        <Clock className="h-4 w-4" />
+                                        <span>{formatDistanceToNow(new Date(log.timestamp), { addSuffix: true })}</span>
+                                    </div>
+                                </TableCell>
+                            </TableRow>
+                        )) : (
+                            !isLoadingLogs && (
+                                <TableRow>
+                                    <TableCell colSpan={3} className="h-24 text-center">
+                                        No recent activity.
+                                    </TableCell>
+                                </TableRow>
+                            )
+                        )}
+                    </TableBody>
+                </Table>
             </CardContent>
         </Card>
       </main>
