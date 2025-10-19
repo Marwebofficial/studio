@@ -13,7 +13,7 @@ import Link from 'next/link';
 import { format } from 'date-fns';
 import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
-import { collection, query, where, orderBy, getDocs, addDoc, serverTimestamp, writeBatch } from 'firebase/firestore';
+import { collection, query, where, orderBy, getDocs, addDoc, serverTimestamp, writeBatch, doc } from 'firebase/firestore';
 
 
 import { getAnswer, speak, getImage, getQuiz } from '@/app/actions';
@@ -107,7 +107,7 @@ const UserMessage = ({ content, fileDataUri, createdAt }: { content: string, fil
               <p className="text-sm text-foreground">{content}</p>
             </div>
             <div className="text-xs text-muted-foreground text-right">
-                {format(new Date(createdAt), 'HH:mm')}
+                {createdAt ? format(new Date(createdAt), 'HH:mm') : ''}
             </div>
           </div>
           <Avatar className="h-8 w-8 border-2 border-primary/50">
@@ -272,7 +272,7 @@ const ErrorMessage = ({ content }: { content: string }) => (
             <Bot className="h-4 w-4" />
         </AvatarFallback>
       </Avatar>
-      <div className="flex-1 space-y-2">
+      <div className="flex-1 space-y2">
         <p className="font-semibold text-destructive">Error</p>
         <div className="prose prose-sm max-w-none text-destructive">
             <p>{content}</p>
@@ -537,7 +537,11 @@ export default function Home() {
 
   const addMessage = async (message: Omit<Message, 'id' | 'createdAt'>) => {
     if (!messagesRef) return null;
-    return await addDoc(messagesRef, { ...message, createdAt: serverTimestamp() });
+    const messageData = { ...message, createdAt: serverTimestamp() };
+    if (messageData.fileDataUri === undefined) {
+      delete messageData.fileDataUri;
+    }
+    return await addDoc(messagesRef, messageData);
   };
 
 
@@ -557,7 +561,8 @@ export default function Home() {
     const command = question.trim().toLowerCase();
 
     let currentChatId = activeChatId;
-    if (!currentChatId || (activeChat && messages && messages.length > 0)) {
+    // This logic is tricky. Let's simplify. If there are existing messages in the current chat, create a new one.
+    if (messages && messages.length > 0) {
         const newChatId = await handleNewChat();
         if (!newChatId) return;
         currentChatId = newChatId;
@@ -744,6 +749,14 @@ export default function Home() {
       );
     }
     
+    if (!user) {
+        return (
+             <div className="text-center text-sm text-muted-foreground p-4">
+                <Link href="/login" className="underline font-semibold">Log in</Link> to see your chat history.
+            </div>
+        )
+    }
+
     if (!chats || chats.length === 0) {
         return (
             <div className="text-center text-sm text-muted-foreground p-4">
@@ -882,7 +895,8 @@ export default function Home() {
                             {messages && messages.map((message, index) => {
                                 const isLastMessage = index === messages.length - 1;
                                 if (message.role === 'user') {
-                                    return <UserMessage key={message.id} content={message.content as string} fileDataUri={message.fileDataUri} createdAt={message.createdAt} />;
+                                    const createdAt = message.createdAt?.toDate ? message.createdAt.toDate().toISOString() : new Date().toISOString();
+                                    return <UserMessage key={message.id} content={message.content as string} fileDataUri={message.fileDataUri} createdAt={createdAt} />;
                                 }
 
                                 if (message.role === 'assistant') {
@@ -1135,5 +1149,3 @@ export default function Home() {
     </SidebarProvider>
   );
 }
-
-    
