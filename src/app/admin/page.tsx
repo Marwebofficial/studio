@@ -4,7 +4,7 @@
 import { ShieldCheck, LayoutDashboard, LogOut, UserPlus, LogIn as LogInIcon, Clock } from 'lucide-react';
 import Link from 'next/link';
 import { useMemo } from 'react';
-import { collection, query, orderBy, limit, type DocumentData, type CollectionReference } from 'firebase/firestore';
+import { collection, query, orderBy, limit, type DocumentData, type CollectionReference, type Timestamp } from 'firebase/firestore';
 import { formatDistanceToNow } from 'date-fns';
 
 
@@ -124,7 +124,7 @@ const AdminDashboard = () => {
                                 <TableCell className="text-right text-muted-foreground">
                                     <div className="flex items-center justify-end gap-2">
                                         <Clock className="h-4 w-4" />
-                                        <span>{formatDistanceToNow(new Date(log.timestamp), { addSuffix: true })}</span>
+                                        <span>{log.timestamp ? formatDistanceToNow((log.timestamp as Timestamp).toDate(), { addSuffix: true }) : 'N/A'}</span>
                                     </div>
                                 </TableCell>
                             </TableRow>
