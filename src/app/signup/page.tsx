@@ -8,6 +8,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { GraduationCap } from 'lucide-react';
 import { createUserWithEmailAndPassword } from 'firebase/auth';
+import { doc, setDoc } from 'firebase/firestore';
 
 import { Button } from '@/components/ui/button';
 import {
@@ -27,7 +28,7 @@ import {
 } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
 import { useToast } from '@/hooks/use-toast';
-import { useAuth } from '@/firebase';
+import { useAuth, useFirestore } from '@/firebase';
 import { FirebaseError } from 'firebase/app';
 
 const formSchema = z.object({
@@ -35,12 +36,16 @@ const formSchema = z.object({
   password: z
     .string()
     .min(6, { message: 'Password must be at least 6 characters.' }),
+  adminCode: z.string().optional(),
 });
+
+const ADMIN_CODE = 'freechatadmin1234';
 
 export default function SignUpPage() {
   const router = useRouter();
   const { toast } = useToast();
   const auth = useAuth();
+  const firestore = useFirestore();
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const form = useForm<z.infer<typeof formSchema>>({
@@ -48,17 +53,41 @@ export default function SignUpPage() {
     defaultValues: {
       email: '',
       password: '',
+      adminCode: '',
     },
   });
 
   async function onSubmit(values: z.infer<typeof formSchema>) {
     setIsSubmitting(true);
     try {
-      await createUserWithEmailAndPassword(auth, values.email, values.password);
-      toast({
-        title: 'Account Created',
-        description: "You've been successfully signed up and logged in.",
-      });
+      const userCredential = await createUserWithEmailAndPassword(
+        auth,
+        values.email,
+        values.password
+      );
+      
+      if (values.adminCode) {
+        if (values.adminCode === ADMIN_CODE) {
+          const adminRef = doc(firestore, 'admins', userCredential.user.uid);
+          await setDoc(adminRef, { isAdmin: true });
+           toast({
+            title: 'Admin Account Created',
+            description: "You've been successfully signed up as an admin.",
+          });
+        } else {
+            toast({
+                variant: 'destructive',
+                title: 'Invalid Admin Code',
+                description: "Your account was created, but the admin code was incorrect.",
+            });
+        }
+      } else {
+         toast({
+            title: 'Account Created',
+            description: "You've been successfully signed up and logged in.",
+        });
+      }
+
       router.push('/');
     } catch (error) {
       console.error(error);
@@ -134,6 +163,24 @@ export default function SignUpPage() {
                       <Input
                         type="password"
                         placeholder="••••••••"
+                        {...field}
+                        disabled={isSubmitting}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="adminCode"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Admin Code (Optional)</FormLabel>
+                    <FormControl>
+                      <Input
+                        type="password"
+                        placeholder="Enter admin code if applicable"
                         {...field}
                         disabled={isSubmitting}
                       />

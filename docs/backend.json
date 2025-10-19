@@ -15,7 +15,9 @@
           "description": "The user's display name."
         }
       },
-      "required": ["email"]
+      "required": [
+        "email"
+      ]
     },
     "Message": {
       "title": "Message",
@@ -27,7 +29,12 @@
         },
         "role": {
           "type": "string",
-          "enum": ["user", "assistant", "system", "error"]
+          "enum": [
+            "user",
+            "assistant",
+            "system",
+            "error"
+          ]
         },
         "content": {
           "type": "string"
@@ -46,7 +53,26 @@
           "type": "object"
         }
       },
-      "required": ["id", "role", "content", "createdAt"]
+      "required": [
+        "id",
+        "role",
+        "content",
+        "createdAt"
+      ]
+    },
+    "Admin": {
+      "title": "Admin",
+      "description": "Represents an admin user.",
+      "type": "object",
+      "properties": {
+        "isAdmin": {
+          "type": "boolean",
+          "description": "Whether the user is an admin."
+        }
+      },
+      "required": [
+        "isAdmin"
+      ]
     }
   },
   "auth": {
@@ -61,6 +87,12 @@
         "$ref": "#/entities/UserProfile"
       },
       "description": "Stores user profile information."
+    },
+    "/admins/{userId}": {
+      "schema": {
+        "$ref": "#/entities/Admin"
+      },
+      "description": "Stores admin user information."
     }
   }
 }
