@@ -11,5 +11,10 @@ service cloud.firestore {
       allow read: if request.auth != null && request.auth.uid == userId;
       allow create: if request.auth != null && request.auth.uid == userId;
     }
+
+    match /activity_logs/{logId} {
+      allow read, list: if request.auth != null && exists(/databases/$(database)/documents/admins/$(request.auth.uid));
+      allow create: if request.auth != null;
+    }
   }
 }
