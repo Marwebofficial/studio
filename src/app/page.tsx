@@ -20,7 +20,7 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import {
   Dialog,
   DialogContent,
@@ -317,12 +317,14 @@ export default function Home() {
   const scrollAreaViewportRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const settingsFileInputRef = useRef<HTMLInputElement>(null);
+  const profilePicInputRef = useRef<HTMLInputElement>(null);
   const [chatToDelete, setChatToDelete] = useState<string | null>(null);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isEditProgramOpen, setIsEditProgramOpen] = useState(false);
   const [programToEdit, setProgramToEdit] = useState<any | null>(null);
   const [programToDelete, setProgramToDelete] = useState<string | null>(null);
   const [studentPrograms, setStudentPrograms] = useState<any[]>([]);
+  const [profilePic, setProfilePic] = useState<string | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
 
   const activeChat = chats.find((chat) => chat.id === activeChatId);
@@ -330,14 +332,19 @@ export default function Home() {
   const isChatsLoading = false; 
 
   useEffect(() => {
-    // Load student programs from localStorage
+    // Load student programs and profile pic from localStorage
     const savedPrograms = localStorage.getItem('studentPrograms');
     const loadedPrograms = savedPrograms ? JSON.parse(savedPrograms, (key, value) => {
         if (key === 'createdAt') return new Date(value);
         return value;
     }) : [];
     setStudentPrograms(loadedPrograms);
-
+    
+    const savedProfilePic = localStorage.getItem('profilePic');
+    if (savedProfilePic) {
+        setProfilePic(savedProfilePic);
+    }
+    
     handleNewChat();
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -347,18 +354,20 @@ export default function Home() {
     if (!user) {
         setChats([]);
         setActiveChatId(null);
+        setProfilePic(null);
+        localStorage.removeItem('profilePic');
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);
 
   useEffect(() => {
-    if (chats.length > 0) {
+    if (chats.length > 0 && activeChat && activeChat.messages.length > 0) {
         localStorage.setItem('chats', JSON.stringify(chats));
     }
     if (activeChatId) {
         localStorage.setItem('activeChatId', activeChatId);
     }
-  }, [chats, activeChatId]);
+  }, [chats, activeChat, activeChatId]);
 
 
   useEffect(() => {
@@ -416,6 +425,23 @@ export default function Home() {
       reader.onload = (loadEvent) => {
         setFileDataUri(loadEvent.target?.result as string);
         setFileName(file.name);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const handleProfilePicChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = (loadEvent) => {
+        const newProfilePic = loadEvent.target?.result as string;
+        setProfilePic(newProfilePic);
+        localStorage.setItem('profilePic', newProfilePic);
+        toast({
+            title: 'Profile Picture Updated',
+            description: 'Your new profile picture has been saved.',
+        });
       };
       reader.readAsDataURL(file);
     }
@@ -797,7 +823,17 @@ export default function Home() {
                             <Skeleton className="h-8 w-24" />
                         ) : user ? (
                             <>
-                                <span className="text-sm text-muted-foreground hidden md:inline">{user.email}</span>
+                                <button type="button" className="flex items-center gap-3" onClick={() => profilePicInputRef.current?.click()}>
+                                    <Avatar className="h-8 w-8">
+                                        <AvatarImage src={profilePic ?? undefined} alt="User profile picture" />
+                                        <AvatarFallback>
+                                            <User />
+                                        </AvatarFallback>
+                                    </Avatar>
+                                    <span className="text-sm text-muted-foreground hidden md:inline">{user.email}</span>
+                                </button>
+                                <input type="file" accept="image/*" ref={profilePicInputRef} onChange={handleProfilePicChange} className="hidden" />
+
                                 <Button variant="ghost" size="icon" onClick={handleLogout}>
                                     <LogOut className="h-4 w-4" />
                                 </Button>
@@ -1112,7 +1148,3 @@ export default function Home() {
     </SidebarProvider>
   );
 }
-
-    
-
-    
