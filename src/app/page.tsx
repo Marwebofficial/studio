@@ -13,6 +13,8 @@ import Link from 'next/link';
 import { format } from 'date-fns';
 import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
+import { collection, query, where, orderBy, getDocs, addDoc, serverTimestamp, writeBatch } from 'firebase/firestore';
+
 
 import { getAnswer, speak, getImage, getQuiz } from '@/app/actions';
 import { Button } from '@/components/ui/button';
@@ -66,7 +68,7 @@ import {
 import { Skeleton } from '@/components/ui/skeleton';
 import { useTypingEffect } from '@/hooks/use-typing-effect';
 import { QuizView, type QuizData } from '@/components/quiz';
-import { useAuth, useUser } from '@/firebase';
+import { useAuth, useUser, useFirestore, useCollection, useMemoFirebase } from '@/firebase';
 import { signOut } from 'firebase/auth';
 import type { Message, Chat } from '@/lib/types';
 
@@ -308,8 +310,9 @@ const examplePrompts = [
 export default function Home() {
   const { toast } = useToast();
   const auth = useAuth();
+  const firestore = useFirestore();
   const { user, isUserLoading } = useUser();
-  const [chats, setChats] = useState<Chat[]>([]);
+
   const [activeChatId, setActiveChatId] = useState<string | null>(null);
   const [fileDataUri, setFileDataUri] = useState<string | undefined>();
   const [fileName, setFileName] = useState<string | undefined>();
@@ -327,9 +330,32 @@ export default function Home() {
   const [profilePic, setProfilePic] = useState<string | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
 
-  const activeChat = chats.find((chat) => chat.id === activeChatId);
-  const messages = activeChat?.messages ?? [];
-  const isChatsLoading = false; 
+  // Firestore-backed chats state
+  const chatsRef = useMemoFirebase(() => {
+    if (!user) return null;
+    return collection(firestore, 'users', user.uid, 'chats');
+  }, [user, firestore]);
+
+  const chatsQuery = useMemoFirebase(() => {
+    if (!chatsRef) return null;
+    return query(chatsRef, orderBy('createdAt', 'desc'));
+  }, [chatsRef]);
+  
+  const { data: chats, isLoading: isChatsLoading } = useCollection<Chat>(chatsQuery);
+
+  const messagesRef = useMemoFirebase(() => {
+    if (!user || !activeChatId) return null;
+    return collection(firestore, 'users', user.uid, 'chats', activeChatId, 'messages');
+  }, [user, activeChatId, firestore]);
+
+  const messagesQuery = useMemoFirebase(() => {
+    if (!messagesRef) return null;
+    return query(messagesRef, orderBy('createdAt', 'asc'));
+  }, [messagesRef]);
+
+  const { data: messages, isLoading: isMessagesLoading } = useCollection<Message>(messagesQuery);
+  
+  const activeChat = chats?.find((chat) => chat.id === activeChatId);
 
   useEffect(() => {
     // Load student programs and profile pic from localStorage
@@ -344,45 +370,35 @@ export default function Home() {
     if (savedProfilePic) {
         setProfilePic(savedProfilePic);
     }
-    
-    handleNewChat();
-
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
     if (!user) {
-        setChats([]);
         setActiveChatId(null);
         setProfilePic(null);
         localStorage.removeItem('profilePic');
+    } else {
+        if (!activeChatId && chats && chats.length > 0) {
+            setActiveChatId(chats[0].id);
+        } else if (!isChatsLoading && chats && chats.length === 0) {
+            handleNewChat();
+        }
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user]);
-
-  useEffect(() => {
-    if (chats.length > 0 && activeChat && activeChat.messages.length > 0) {
-        localStorage.setItem('chats', JSON.stringify(chats));
-    }
-    if (activeChatId) {
-        localStorage.setItem('activeChatId', activeChatId);
-    }
-  }, [chats, activeChat, activeChatId]);
+  }, [user, chats, isChatsLoading, activeChatId]);
 
 
   useEffect(() => {
     localStorage.setItem('studentPrograms', JSON.stringify(studentPrograms));
   }, [studentPrograms]);
   
-  const handleNewChat = () => {
-    const newChat: Chat = {
-      id: crypto.randomUUID(),
-      messages: [],
-      createdAt: new Date().toISOString(),
-    };
-    setChats((prev) => [newChat, ...prev]);
-    setActiveChatId(newChat.id);
-    return newChat.id;
+  const handleNewChat = async () => {
+    if (!user) return null;
+    const newChatRef = await addDoc(chatsRef!, {
+        createdAt: serverTimestamp(),
+        title: 'New Chat',
+    });
+    setActiveChatId(newChatRef.id);
+    return newChatRef.id;
   };
 
   const form = useForm<z.infer<typeof formSchema>>({
@@ -401,21 +417,15 @@ export default function Home() {
   });
 
   const handlePrompt = async (prompt: string) => {
-    let newChatId = activeChatId;
-    if (activeChat && activeChat.messages.length > 0) {
-        const createdChatId = handleNewChat();
-        if (!createdChatId) return;
-        newChatId = createdChatId;
-    }
-    // Use a timeout to ensure the state update for the new chat is processed
-    // before we set and submit the form.
-    setTimeout(() => {
-        if (newChatId) {
-            setActiveChatId(newChatId);
-            form.setValue('question', prompt);
+    form.setValue('question', prompt);
+    const newChatId = await handleNewChat();
+    if(newChatId) {
+        setActiveChatId(newChatId);
+        // Use a timeout to ensure state updates before submitting
+        setTimeout(() => {
             form.handleSubmit((data) => onSubmit(data))();
-        }
-    }, 0);
+        }, 0);
+    }
   };
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>, isSettings: boolean = false) => {
@@ -525,23 +535,15 @@ export default function Home() {
     });
   };
 
-  const setMessages = (chatId: string, newMessages: Message[] | ((prevMessages: Message[]) => Message[])) => {
-    setChats(prevChats => {
-        return prevChats.map(chat => {
-            if (chat.id === chatId) {
-                const finalMessages = typeof newMessages === 'function' ? newMessages(chat.messages) : newMessages;
-                return { ...chat, messages: finalMessages };
-            }
-            return chat;
-        });
-    });
+  const addMessage = async (message: Omit<Message, 'id' | 'createdAt'>) => {
+    if (!messagesRef) return null;
+    return await addDoc(messagesRef, { ...message, createdAt: serverTimestamp() });
   };
 
 
   const onSubmit = async (data: z.infer<typeof formSchema>) => {
     const question = data.question;
-
-    if (!question) return;
+    if (!question || !user || !activeChatId) return;
 
     if (!user) {
         toast({
@@ -553,15 +555,11 @@ export default function Home() {
     }
 
     const command = question.trim().toLowerCase();
-    
-    let currentChatId: string;
-    
-    const isNewConversation = activeChat?.messages.length === 0;
 
-    if (isNewConversation && activeChatId) {
-        currentChatId = activeChatId;
-    } else {
-        const newChatId = handleNewChat();
+    let currentChatId = activeChatId;
+    if (!currentChatId || (activeChat && messages && messages.length > 0)) {
+        const newChatId = await handleNewChat();
+        if (!newChatId) return;
         currentChatId = newChatId;
     }
 
@@ -581,31 +579,25 @@ export default function Home() {
     }
 
     if (command === 'studentprogram') {
-        const systemMessage: Message = {
-            id: crypto.randomUUID(),
+        await addMessage({
             role: 'system',
             content: 'Displaying student programs.',
             programs: studentPrograms,
-            createdAt: new Date().toISOString(),
-        };
-
-        setMessages(currentChatId, (prev) => [...prev, systemMessage]);
+        });
         form.reset();
         return;
     }
-
+    
     const currentFileDataUri = fileDataUri;
-
+    
     form.reset();
     setFileDataUri(undefined);
     setFileName(undefined);
     if (fileInputRef.current) {
         fileInputRef.current.value = '';
     }
-    
-    const userMessage: Message = { id: crypto.randomUUID(), role: 'user', content: question, fileDataUri: currentFileDataUri, createdAt: new Date().toISOString() };
 
-    setMessages(currentChatId, (prev) => [...prev, userMessage]);
+    await addMessage({ role: 'user', content: question, fileDataUri: currentFileDataUri });
     
     setIsPending(true);
     abortControllerRef.current = new AbortController();
@@ -614,51 +606,37 @@ export default function Home() {
     try {
         if (question.startsWith('/imagine')) {
             const prompt = question.replace('/imagine', '').trim();
-            if (!prompt) {
-                throw new Error('Please provide a prompt for the image generation.');
-            }
+            if (!prompt) throw new Error('Please provide a prompt for the image generation.');
+            
             const { imageUrl, error } = await getImage(prompt);
-
             if (error) throw new Error(error);
             if (!imageUrl) throw new Error('Image generation failed to return an image.');
             
-            const imageMessage: Message = { 
-                id: crypto.randomUUID(), 
+            await addMessage({ 
                 role: 'assistant', 
                 content: `> ${prompt}`,
                 imageUrl: imageUrl, 
-                createdAt: new Date().toISOString() 
-            };
-            setMessages(currentChatId, (prev) => [...prev, imageMessage]);
+            });
             
         } else if (question.startsWith('/quiz')) {
             const topic = question.replace('/quiz', '').trim();
-            if (!topic) {
-                throw new Error('Please provide a topic for the quiz.');
-            }
-            const { quiz, error } = await getQuiz(topic);
+            if (!topic) throw new Error('Please provide a topic for the quiz.');
 
+            const { quiz, error } = await getQuiz(topic);
             if (error) throw new Error(error);
             if (!quiz) throw new Error('Quiz generation failed to return a quiz.');
 
-            const quizMessage: Message = { 
-                id: crypto.randomUUID(), 
+            await addMessage({
                 role: 'assistant', 
                 content: `Quiz on: ${topic}`, 
                 quiz: quiz,
-                createdAt: new Date().toISOString() 
-            };
-            setMessages(currentChatId, (prev) => [...prev, quizMessage]);
+            });
 
         } else {
             const { answer, error } = await getAnswer(question, currentFileDataUri, signal);
-            
-            if (error) {
-              throw new Error(error);
-            }
+            if (error) throw new Error(error);
       
-            const assistantMessage: Message = { id: crypto.randomUUID(), role: 'assistant', content: answer, createdAt: new Date().toISOString() };
-            setMessages(currentChatId, (prev) => [...prev, assistantMessage]);
+            await addMessage({ role: 'assistant', content: answer });
         }
 
     } catch (error) {
@@ -666,8 +644,7 @@ export default function Home() {
         console.log('Request was aborted.');
       } else {
         const errorMessageContent = error instanceof Error ? error.message : 'An unknown error occurred.';
-        const errorMessage: Message = { id: crypto.randomUUID(), role: 'error', content: errorMessageContent, createdAt: new Date().toISOString() };
-        setMessages(currentChatId, (prev) => [...prev, errorMessage]);
+        await addMessage({ role: 'error', content: errorMessageContent });
 
         toast({
           variant: 'destructive',
@@ -688,28 +665,41 @@ export default function Home() {
   };
 
   const getChatTitle = (chat: Chat) => {
-    if (chat.messages.length === 0) return 'New Chat';
-    const firstUserMessage = chat.messages.find(m => m.role === 'user');
-    const content = firstUserMessage?.content;
+    if (!chat.title || chat.title === 'New Chat') {
+      const firstUserMessage = messages?.find(m => m.role === 'user');
+      const content = firstUserMessage?.content as string | undefined;
 
-    if (typeof content === 'string') {
+      if (content) {
         if (content.startsWith('/quiz')) return `Quiz: ${content.substring(5).trim()}`;
         if (content.startsWith('/imagine')) return `Image: ${content.substring(8).trim()}`;
-        return content;
+        return content.substring(0, 40);
+      }
     }
-    
-    return 'New Chat';
+    return chat.title || 'New Chat';
   }
   
   const handleDeleteChat = async (chatIdToDelete: string) => {
-    const newChats = chats.filter(chat => chat.id !== chatIdToDelete);
-    setChats(newChats);
+    if (!user) return;
+    const batch = writeBatch(firestore);
+
+    // Delete all messages in the chat
+    const messagesToDeleteQuery = query(collection(firestore, 'users', user.uid, 'chats', chatIdToDelete, 'messages'));
+    const messagesSnapshot = await getDocs(messagesToDeleteQuery);
+    messagesSnapshot.forEach(doc => {
+      batch.delete(doc.ref);
+    });
+    
+    // Delete the chat itself
+    const chatToDeleteRef = doc(firestore, 'users', user.uid, 'chats', chatIdToDelete);
+    batch.delete(chatToDeleteRef);
+    
+    await batch.commit();
 
     if (activeChatId === chatIdToDelete) {
-        if (newChats.length > 0) {
-            setActiveChatId(newChats[0].id);
+        if (chats && chats.length > 1) {
+            setActiveChatId(chats[0].id);
         } else {
-            handleNewChat();
+            await handleNewChat();
         }
     }
   };
@@ -754,9 +744,7 @@ export default function Home() {
       );
     }
     
-    const displayedChats = chats.filter(c => c.messages.length > 0);
-
-    if (displayedChats.length === 0) {
+    if (!chats || chats.length === 0) {
         return (
             <div className="text-center text-sm text-muted-foreground p-4">
                 No chats yet. Start a new conversation!
@@ -764,10 +752,9 @@ export default function Home() {
         )
     }
 
-
     return (
       <div className="flex flex-col gap-1 pr-2">
-        {displayedChats.map(chat => (
+        {chats.map(chat => (
           <div key={chat.id} className="group relative">
             <Button
               variant={activeChatId === chat.id ? 'secondary' : 'ghost'}
@@ -854,7 +841,7 @@ export default function Home() {
                 <main className="flex-1 overflow-hidden">
                     <ScrollArea className="h-full" viewportRef={scrollAreaViewportRef}>
                         <div className="mx-auto max-w-3xl px-4 md:px-6">
-                        {messages.length === 0 && !isPending ? (
+                        {(!messages || messages.length === 0) && !isPending ? (
                             <div className="flex flex-col items-center justify-center h-full min-h-[calc(100vh-14rem)]">
                                 <Card className="w-full max-w-2xl text-center shadow-none border-0 bg-transparent">
                                     <CardHeader className="gap-2">
@@ -892,7 +879,7 @@ export default function Home() {
                             </div>
                         ) : (
                         <div className="space-y-6 pt-6 pb-12">
-                            {messages.map((message, index) => {
+                            {messages && messages.map((message, index) => {
                                 const isLastMessage = index === messages.length - 1;
                                 if (message.role === 'user') {
                                     return <UserMessage key={message.id} content={message.content as string} fileDataUri={message.fileDataUri} createdAt={message.createdAt} />;
@@ -1148,3 +1135,5 @@ export default function Home() {
     </SidebarProvider>
   );
 }
+
+    

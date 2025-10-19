@@ -1,4 +1,5 @@
 
+
 import type { GenerateQuizOutput } from "@/ai/flows/generate-quiz";
 
 export type Message = {
@@ -9,13 +10,14 @@ export type Message = {
     imageUrl?: string;
     quiz?: GenerateQuizOutput;
     programs?: any[]; // For student program system messages
-    createdAt: string;
+    createdAt?: any;
 };
   
 export type Chat = {
     id: string;
-    messages: Message[];
-    createdAt: string;
+    title: string;
+    messages?: Message[];
+    createdAt: any;
 };
 
 export type QuizQuestion = {
@@ -25,3 +27,5 @@ export type QuizQuestion = {
     explanation: string;
 };
 
+
+    

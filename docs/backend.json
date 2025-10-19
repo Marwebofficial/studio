@@ -104,6 +104,24 @@
         "activityType",
         "timestamp"
       ]
+    },
+    "Chat": {
+      "title": "Chat",
+      "description": "Represents a chat session.",
+      "type": "object",
+      "properties": {
+        "title": {
+          "type": "string"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "title",
+        "createdAt"
+      ]
     }
   },
   "auth": {
@@ -130,6 +148,20 @@
         "$ref": "#/entities/ActivityLog"
       },
       "description": "Stores user activity logs for admin monitoring."
+    },
+    "/users/{userId}/chats/{chatId}": {
+      "schema": {
+        "$ref": "#/entities/Chat"
+      },
+      "description": "Stores individual chat sessions for a user."
+    },
+    "/users/{userId}/chats/{chatId}/messages/{messageId}": {
+      "schema": {
+        "$ref": "#/entities/Message"
+      },
+      "description": "Stores messages within a specific chat session."
     }
   }
 }
+
+    

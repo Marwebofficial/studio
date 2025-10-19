@@ -1,10 +1,11 @@
 
+
 'use client';
 
 import { ShieldCheck, LayoutDashboard, LogOut, UserPlus, LogIn as LogInIcon, Clock } from 'lucide-react';
 import Link from 'next/link';
-import { useMemo } from 'react';
-import { collection, query, orderBy, limit, type DocumentData, type CollectionReference, type Timestamp } from 'firebase/firestore';
+import { useMemo, useState, useEffect } from 'react';
+import { collection, query, orderBy, limit, type DocumentData, type CollectionReference, type Timestamp, getDocs } from 'firebase/firestore';
 import { formatDistanceToNow } from 'date-fns';
 
 
@@ -24,27 +25,37 @@ import {
     TableHeader,
     TableRow,
   } from "@/components/ui/table"
-import { useUser, useFirestore, useCollection, useMemoFirebase } from '@/firebase';
+import { useUser, useFirestore, useMemoFirebase } from '@/firebase';
 import { signOut } from 'firebase/auth';
 import { useAuth } from '@/firebase';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Skeleton } from '@/components/ui/skeleton';
 
 const AdminDashboard = () => {
-    const auth = useAuth();
     const firestore = useFirestore();
+    const [activityLogs, setActivityLogs] = useState<DocumentData[]>([]);
+    const [isLoadingLogs, setIsLoadingLogs] = useState(true);
 
-    const activityLogsRef = useMemoFirebase(() => {
-        return collection(firestore, 'activity_logs') as CollectionReference<DocumentData>;
+    useEffect(() => {
+        const fetchLogs = async () => {
+            try {
+                const activityLogsRef = collection(firestore, 'activity_logs');
+                const q = query(activityLogsRef, orderBy('timestamp', 'desc'), limit(20));
+                const querySnapshot = await getDocs(q);
+                const logs = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                setActivityLogs(logs);
+            } catch (error) {
+                console.error("Error fetching activity logs:", error);
+            } finally {
+                setIsLoadingLogs(false);
+            }
+        };
+
+        fetchLogs();
     }, [firestore]);
 
-    const activityLogsQuery = useMemoFirebase(() => {
-        if (!activityLogsRef) return null;
-        return query(activityLogsRef, orderBy('timestamp', 'desc'), limit(20));
-    }, [activityLogsRef]);
 
-    const { data: activityLogs, isLoading: isLoadingLogs } = useCollection(activityLogsQuery);
-
+    const auth = useAuth();
     const handleLogout = async () => {
         await signOut(auth);
         window.location.href = '/';
@@ -68,7 +79,7 @@ const AdminDashboard = () => {
             <CardHeader>
                 <CardTitle>Site Activity</CardTitle>
                 <CardDescription>
-                    A real-time log of recent user activity on the site.
+                    A log of recent user activity on the site.
                 </CardDescription>
             </CardHeader>
             <CardContent>
@@ -200,3 +211,5 @@ export default function AdminPage() {
 
   return <AdminDashboard />;
 }
+
+    
