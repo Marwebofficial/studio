@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 
-export function useTypingEffect(text: string, speed: number = 20) {
+export function useTypingEffect(text: string, speed: number = 20, enabled: boolean = true) {
   const [displayedText, setDisplayedText] = useState('');
 
   useEffect(() => {
@@ -11,8 +11,7 @@ export function useTypingEffect(text: string, speed: number = 20) {
         return;
     }
 
-    // If speed is 0, display text immediately
-    if (speed === 0) {
+    if (!enabled || speed === 0) {
         setDisplayedText(text);
         return;
     }
@@ -30,7 +29,7 @@ export function useTypingEffect(text: string, speed: number = 20) {
 
     return () => clearInterval(intervalId);
     
-  }, [text, speed]);
+  }, [text, speed, enabled]);
 
   return displayedText;
 }

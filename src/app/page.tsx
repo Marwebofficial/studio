@@ -6,7 +6,7 @@ import { useState, useRef, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
-import { Bot, User, Send, GraduationCap, MessageSquarePlus, Paperclip, X, Trash, FileText, Loader, Volume2, BookCopy, Square, LogOut, Edit } from 'lucide-react';
+import { Bot, User, Send, GraduationCap, MessageSquarePlus, Paperclip, X, Trash, FileText, Loader, Volume2, BookCopy, Square, LogOut, Edit, Shield } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import Image from 'next/image';
 import Link from 'next/link';
@@ -311,7 +311,7 @@ export default function Home() {
   const { toast } = useToast();
   const auth = useAuth();
   const firestore = useFirestore();
-  const { user, isUserLoading } = useUser();
+  const { user, isAdmin, isUserLoading } = useUser();
 
   const [activeChatId, setActiveChatId] = useState<string | null>(null);
   const [fileDataUri, setFileDataUri] = useState<string | undefined>();
@@ -378,9 +378,7 @@ export default function Home() {
         setProfilePic(null);
         localStorage.removeItem('profilePic');
     } else {
-        if (!activeChatId && chats && chats.length > 0) {
-            setActiveChatId(chats[0].id);
-        } else if (!isChatsLoading && chats && chats.length === 0) {
+        if (!isChatsLoading && !activeChatId) {
             handleNewChat();
         }
     }
@@ -547,28 +545,16 @@ export default function Home() {
 
   const onSubmit = async (data: z.infer<typeof formSchema>) => {
     const question = data.question;
-    if (!question || !user || !activeChatId) return;
-
-    if (!user) {
-        toast({
-            title: 'Please log in',
-            description: 'You need to be logged in to ask a question.',
-            variant: 'destructive'
-        });
-        return;
-    }
-
-    const command = question.trim().toLowerCase();
+    if (!question || !user) return;
 
     let currentChatId = activeChatId;
-    // This logic is tricky. Let's simplify. If there are existing messages in the current chat, create a new one.
-    if (messages && messages.length > 0) {
+    if (!currentChatId || (messages && messages.length > 0)) {
         const newChatId = await handleNewChat();
         if (!newChatId) return;
         currentChatId = newChatId;
     }
-
-    if (command === 'studentprogramsetting') {
+    
+    if (question.trim().toLowerCase() === 'studentprogramsetting') {
         setProgramToEdit(null);
         settingsForm.reset();
         removeFile(true);
@@ -577,13 +563,13 @@ export default function Home() {
         return;
     }
 
-    if (command === 'editstudentprogram') {
+    if (question.trim().toLowerCase() === 'editstudentprogram') {
         setIsEditProgramOpen(true);
         form.reset();
         return;
     }
 
-    if (command === 'studentprogram') {
+    if (question.trim().toLowerCase() === 'studentprogram') {
         await addMessage({
             role: 'system',
             content: 'Displaying student programs.',
@@ -701,11 +687,7 @@ export default function Home() {
     await batch.commit();
 
     if (activeChatId === chatIdToDelete) {
-        if (chats && chats.length > 1) {
-            setActiveChatId(chats[0].id);
-        } else {
-            await handleNewChat();
-        }
+        await handleNewChat();
     }
   };
 
@@ -823,6 +805,11 @@ export default function Home() {
                             <Skeleton className="h-8 w-24" />
                         ) : user ? (
                             <>
+                                {isAdmin && (
+                                    <Button asChild variant="ghost" size="sm">
+                                        <Link href="/admin"><Shield className="mr-2 h-4 w-4" />Admin</Link>
+                                    </Button>
+                                )}
                                 <button type="button" className="flex items-center gap-3" onClick={() => profilePicInputRef.current?.click()}>
                                     <Avatar className="h-8 w-8">
                                         <AvatarImage src={profilePic ?? undefined} alt="User profile picture" />
@@ -893,7 +880,7 @@ export default function Home() {
                         ) : (
                         <div className="space-y-6 pt-6 pb-12">
                             {messages && messages.map((message, index) => {
-                                const isLastMessage = index === messages.length - 1;
+                                const isLastMessage = index === messages.length - 1 && isPending;
                                 if (message.role === 'user') {
                                     const createdAt = message.createdAt?.toDate ? message.createdAt.toDate().toISOString() : new Date().toISOString();
                                     return <UserMessage key={message.id} content={message.content as string} fileDataUri={message.fileDataUri} createdAt={createdAt} />;
@@ -982,9 +969,6 @@ export default function Home() {
                     )}
                     <p className="text-xs text-center text-muted-foreground mt-3">
                         Press <kbd className="pointer-events-none inline-flex h-5 select-none items-center gap-1 rounded border bg-muted px-1.5 font-mono text-[10px] font-medium text-muted-foreground opacity-100"><span className="text-xs">⌘</span>B</kbd> to toggle the sidebar.
-                    </p>
-                    <p className="text-xs text-center text-muted-foreground mt-2">
-                        <Link href="/admin" className="underline">Admin</Link>
                     </p>
                     </div>
                 </footer>

@@ -36,7 +36,7 @@ const generateQuizFlow = ai.defineFlow(
     outputSchema: GenerateQuizOutputSchema,
   },
   async (topic) => {
-    const prompt = `Generate a 5-question multiple-choice quiz about ${topic}. Provide 4 options for each question. Include the correct answer's index and an explanation.`;
+    const prompt = `Generate a challenging 5-question multiple-choice quiz about ${topic}. The questions should be high-quality and suitable for exam preparation. Provide 4 options for each question. Include the correct answer's index and a detailed explanation for the correct answer.`;
     
     const { output } = await ai.generate({
         model: 'googleai/gemini-2.5-flash',
@@ -44,7 +44,7 @@ const generateQuizFlow = ai.defineFlow(
         output: {
             schema: GenerateQuizOutputSchema,
         },
-        system: 'You are an expert quiz creator for a variety of exam standards and general knowledge.',
+        system: 'You are an expert quiz creator for a variety of exam standards and general knowledge. You create challenging and high-quality questions.',
     });
 
     if (!output) {
