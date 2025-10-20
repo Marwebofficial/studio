@@ -391,7 +391,7 @@ export default function Home() {
         title: 'New Chat',
     });
     setActiveChatId(newChatRef.id);
-    return newChatId.id;
+    return newChatRef.id;
   };
 
   const form = useForm<z.infer<typeof formSchema>>({
