@@ -1,8 +1,9 @@
+
 "use client"
 
 import { useState, useEffect } from 'react';
 
-export function useTypingEffect(text: string, speed: number = 20, enabled: boolean = true) {
+export function useTypingEffect(text: string, speed: number = 20, isInstant: boolean = false) {
   const [displayedText, setDisplayedText] = useState('');
 
   useEffect(() => {
@@ -11,7 +12,7 @@ export function useTypingEffect(text: string, speed: number = 20, enabled: boole
         return;
     }
 
-    if (!enabled || speed === 0) {
+    if (isInstant || speed === 0) {
         setDisplayedText(text);
         return;
     }
@@ -29,9 +30,11 @@ export function useTypingEffect(text: string, speed: number = 20, enabled: boole
 
     return () => clearInterval(intervalId);
     
-  }, [text, speed, enabled]);
+  }, [text, speed, isInstant]);
 
   return displayedText;
 }
+
+    
 
     

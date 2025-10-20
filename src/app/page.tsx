@@ -83,7 +83,7 @@ const settingsFormSchema = z.object({
 });
 
 
-const UserMessage = ({ content, fileDataUri, createdAt }: { content: string, fileDataUri?: string, createdAt: string }) => {
+const UserMessage = ({ content, fileDataUri, createdAt, profilePic }: { content: string, fileDataUri?: string, createdAt: string, profilePic: string | null }) => {
     const isImage = fileDataUri?.startsWith('data:image');
     return (
         <div className="flex items-start gap-3 justify-end">
@@ -111,6 +111,7 @@ const UserMessage = ({ content, fileDataUri, createdAt }: { content: string, fil
             </div>
           </div>
           <Avatar className="h-8 w-8 border-2 border-primary/50">
+            <AvatarImage src={profilePic ?? undefined} alt="User profile picture" />
             <AvatarFallback className="bg-transparent">
               <User className="h-4 w-4 text-primary" />
             </AvatarFallback>
@@ -124,16 +125,13 @@ const AssistantMessage = ({ message, isLastMessage }: { message: Message, isLast
     const [audio, setAudio] = useState<HTMLAudioElement | null>(null);
     const [isPlaying, setIsPlaying] = useState(false);
     const [isGenerating, setIsGenerating] = useState(false);
-    const [typingStopped, setTypingStopped] = useState(false);
     
     const content = message.content;
     const isStringContent = typeof content === 'string';
-    const typedContent = useTypingEffect(isStringContent ? content : '', isLastMessage ? 10 : 0);
+    const displayedContent = useTypingEffect(isStringContent ? content : '', isLastMessage ? 10 : 0, !isLastMessage);
     
-    const isTyping = isLastMessage && isStringContent && typedContent.length < content.length && !typingStopped;
+    const isTyping = isLastMessage && isStringContent && displayedContent.length < content.length;
 
-    const displayedContent = isLastMessage && isStringContent && !typingStopped ? typedContent : content;
-  
     const handleSpeak = async () => {
         if (typeof content !== 'string' || content.length === 0) return;
         
@@ -193,9 +191,9 @@ const AssistantMessage = ({ message, isLastMessage }: { message: Message, isLast
                     {isTyping && (
                       <Button 
                           size="icon" 
-                          variant="ghost" 
-                          onClick={() => setTypingStopped(true)}
+                          variant="ghost"
                           className="h-7 w-7"
+                          // onClick={() => setTypingStopped(true)} // This functionality is removed for simplicity now.
                       >
                           <Square className="h-4 w-4" />
                       </Button>
@@ -378,8 +376,10 @@ export default function Home() {
         setProfilePic(null);
         localStorage.removeItem('profilePic');
     } else {
-        if (!isChatsLoading && !activeChatId) {
+        if (!isChatsLoading && !activeChatId && chats?.length === 0) {
             handleNewChat();
+        } else if (!isChatsLoading && !activeChatId && chats && chats.length > 0) {
+            // No active chat is set, but chats exist. Don't auto-select one to show new chat screen.
         }
     }
   }, [user, chats, isChatsLoading, activeChatId]);
@@ -415,10 +415,14 @@ export default function Home() {
   });
 
   const handlePrompt = async (prompt: string) => {
-    form.setValue('question', prompt);
-    const newChatId = await handleNewChat();
-    if(newChatId) {
+    let newChatId = activeChatId;
+    if (!activeChatId || (messages && messages.length > 0)) {
+        newChatId = await handleNewChat();
+    }
+    
+    if (newChatId) {
         setActiveChatId(newChatId);
+        form.setValue('question', prompt);
         // Use a timeout to ensure state updates before submitting
         setTimeout(() => {
             form.handleSubmit((data) => onSubmit(data))();
@@ -535,7 +539,7 @@ export default function Home() {
 
   const addMessage = async (message: Omit<Message, 'id' | 'createdAt'>) => {
     if (!messagesRef) return null;
-    const messageData = { ...message, createdAt: serverTimestamp() };
+    const messageData: { [key: string]: any } = { ...message, createdAt: serverTimestamp() };
     if (messageData.fileDataUri === undefined) {
       delete messageData.fileDataUri;
     }
@@ -548,7 +552,7 @@ export default function Home() {
     if (!question || !user) return;
 
     let currentChatId = activeChatId;
-    if (!currentChatId || (messages && messages.length > 0)) {
+    if (!currentChatId) {
         const newChatId = await handleNewChat();
         if (!newChatId) return;
         currentChatId = newChatId;
@@ -687,7 +691,7 @@ export default function Home() {
     await batch.commit();
 
     if (activeChatId === chatIdToDelete) {
-        await handleNewChat();
+        setActiveChatId(null);
     }
   };
 
@@ -780,7 +784,7 @@ export default function Home() {
         <div className="flex h-svh w-full bg-background">
             <Sidebar collapsible="icon" className="border-r-0 md:bg-card/50 backdrop-blur-sm md:border-r">
                 <SidebarHeader>
-                  <Button variant="ghost" className="w-full justify-start h-10" onClick={handleNewChat} disabled={!user}>
+                  <Button variant="ghost" className="w-full justify-start h-10" onClick={() => { setActiveChatId(null); handleNewChat(); }} disabled={!user}>
                     <MessageSquarePlus className="mr-2" />
                     New Chat
                   </Button>
@@ -841,7 +845,7 @@ export default function Home() {
                 <main className="flex-1 overflow-hidden">
                     <ScrollArea className="h-full" viewportRef={scrollAreaViewportRef}>
                         <div className="mx-auto max-w-3xl px-4 md:px-6">
-                        {(!messages || messages.length === 0) && !isPending ? (
+                        {(!messages || messages.length === 0) && !isPending && (!isMessagesLoading || !activeChatId) ? (
                             <div className="flex flex-col items-center justify-center h-full min-h-[calc(100vh-14rem)]">
                                 <Card className="w-full max-w-2xl text-center shadow-none border-0 bg-transparent">
                                     <CardHeader className="gap-2">
@@ -879,11 +883,12 @@ export default function Home() {
                             </div>
                         ) : (
                         <div className="space-y-6 pt-6 pb-12">
+                            {isMessagesLoading && activeChatId && [...Array(3)].map((_, i) => <LoadingMessage key={i} />)}
                             {messages && messages.map((message, index) => {
                                 const isLastMessage = index === messages.length - 1 && isPending;
                                 if (message.role === 'user') {
                                     const createdAt = message.createdAt?.toDate ? message.createdAt.toDate().toISOString() : new Date().toISOString();
-                                    return <UserMessage key={message.id} content={message.content as string} fileDataUri={message.fileDataUri} createdAt={createdAt} />;
+                                    return <UserMessage key={message.id} content={message.content as string} fileDataUri={message.fileDataUri} createdAt={createdAt} profilePic={profilePic} />;
                                 }
 
                                 if (message.role === 'assistant') {
@@ -1133,3 +1138,5 @@ export default function Home() {
     </SidebarProvider>
   );
 }
+
+    
