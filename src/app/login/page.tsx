@@ -73,7 +73,6 @@ export default function LoginPage() {
       });
       router.push('/');
     } catch (error) {
-      console.error(error);
       let errorMessage = 'An unexpected error occurred. Please try again.';
       if (error instanceof FirebaseError) {
         switch (error.code) {
