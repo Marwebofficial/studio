@@ -120,7 +120,7 @@ const UserMessage = ({ content, fileDataUri, createdAt, profilePic }: { content:
 }
   
 
-const AssistantMessage = ({ message, isLastMessage }: { message: Message, isLastMessage: boolean }) => {
+const AssistantMessage = ({ message, isLastMessage, isPending }: { message: Message, isLastMessage: boolean, isPending: boolean }) => {
     const [audio, setAudio] = useState<HTMLAudioElement | null>(null);
     const [isPlaying, setIsPlaying] = useState(false);
     const [isGenerating, setIsGenerating] = useState(false);
@@ -385,13 +385,13 @@ export default function Home() {
   }, [studentPrograms]);
   
   const handleNewChat = async () => {
-    if (!user) return null;
+    if (!user || isUserLoading) return null;
     const newChatRef = await addDoc(chatsRef!, {
         createdAt: serverTimestamp(),
         title: 'New Chat',
     });
     setActiveChatId(newChatRef.id);
-    return newChatRef.id;
+    return newChatId.id;
   };
 
   const form = useForm<z.infer<typeof formSchema>>({
@@ -882,7 +882,7 @@ export default function Home() {
                                 }
 
                                 if (message.role === 'assistant') {
-                                    return <AssistantMessage key={message.id} message={message} isLastMessage={isLastMessage} />;
+                                    return <AssistantMessage key={message.id} message={message} isLastMessage={isLastMessage} isPending={isPending} />;
                                 }
                                 if (message.role === 'error') {
                                     return <ErrorMessage key={message.id} content={message.content as string} />;
