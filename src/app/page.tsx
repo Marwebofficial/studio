@@ -1,5 +1,4 @@
 
-
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
@@ -128,9 +127,11 @@ const AssistantMessage = ({ message, isLastMessage }: { message: Message, isLast
     
     const content = message.content;
     const isStringContent = typeof content === 'string';
-    const displayedContent = useTypingEffect(isStringContent ? content : '', isLastMessage ? 10 : 0, !isLastMessage || !!message.quiz);
+    const isTypingDisabled = !isLastMessage || !!message.quiz || isPending;
+    const displayedContent = useTypingEffect(isStringContent ? content : '', isTypingDisabled ? 0 : 10, isTypingDisabled);
+
     
-    const isTyping = isLastMessage && isStringContent && displayedContent.length < content.length;
+    const isTyping = isLastMessage && isStringContent && displayedContent.length < content.length && !isPending;
 
     const handleSpeak = async () => {
         if (typeof content !== 'string' || content.length === 0) return;
@@ -371,16 +372,12 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
-    if (!user) {
-        setActiveChatId(null);
-        setProfilePic(null);
-        localStorage.removeItem('profilePic');
-    } else {
-        if (!isUserLoading && user && !isChatsLoading && chats?.length === 0 && !activeChatId) {
-            handleNewChat();
-        }
+    if (!isUserLoading && !user) {
+      setActiveChatId(null);
+      setProfilePic(null);
+      localStorage.removeItem('profilePic');
     }
-  }, [user, isUserLoading, chats, isChatsLoading, activeChatId]);
+  }, [user, isUserLoading]);
 
 
   useEffect(() => {
@@ -545,15 +542,9 @@ export default function Home() {
 
     let currentChatId = activeChatId;
 
-    // Create a new chat if there's no active one, or if the active one already has messages.
-    if (!currentChatId || (messages && messages.length > 0 && activeChatId)) {
+    if (!currentChatId) {
         const newChatId = await handleNewChat();
         if (!newChatId) return; // Stop if chat creation failed
-        currentChatId = newChatId;
-    } else if (!currentChatId) {
-        // This case handles when the page loads for the first time for a new user
-        const newChatId = await handleNewChat();
-        if (!newChatId) return;
         currentChatId = newChatId;
     }
     
@@ -752,8 +743,8 @@ export default function Home() {
 
     return (
       <div className="flex flex-col gap-1 pr-2">
-        {chats.map(chat => (
-          <div key={chat.id} className="group relative">
+        {chats.map((chat, index) => (
+          <div key={`${chat.id}-${index}`} className="group relative">
             <Button
               variant={activeChatId === chat.id ? 'secondary' : 'ghost'}
               className="w-full justify-start h-8 text-sm truncate pr-8"
@@ -844,7 +835,7 @@ export default function Home() {
                 <main className="flex-1 overflow-hidden">
                     <ScrollArea className="h-full" viewportRef={scrollAreaViewportRef}>
                         <div className="mx-auto max-w-3xl px-4 md:px-6">
-                        {(!messages || messages.length === 0) && !isPending && (!isMessagesLoading || !activeChatId) && !activeChatId ? (
+                        {(!activeChatId) ? (
                             <div className="flex flex-col items-center justify-center h-full min-h-[calc(100vh-14rem)]">
                                 <Card className="w-full max-w-2xl text-center shadow-none border-0 bg-transparent">
                                     <CardHeader className="gap-2">
@@ -1138,3 +1129,5 @@ export default function Home() {
   );
 }
 
+
+    
