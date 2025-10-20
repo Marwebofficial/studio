@@ -128,7 +128,7 @@ const AssistantMessage = ({ message, isLastMessage }: { message: Message, isLast
     
     const content = message.content;
     const isStringContent = typeof content === 'string';
-    const displayedContent = useTypingEffect(isStringContent ? content : '', isLastMessage ? 10 : 0, !isLastMessage);
+    const displayedContent = useTypingEffect(isStringContent ? content : '', isLastMessage ? 10 : 0, !isLastMessage || !!message.quiz);
     
     const isTyping = isLastMessage && isStringContent && displayedContent.length < content.length;
 
@@ -198,7 +198,7 @@ const AssistantMessage = ({ message, isLastMessage }: { message: Message, isLast
                           <Square className="h-4 w-4" />
                       </Button>
                     )}
-                    {isStringContent && (content as string).length > 0 && (
+                    {isStringContent && (content as string).length > 0 && !message.quiz && (
                       <Button 
                           size="icon" 
                           variant="ghost" 
@@ -376,13 +376,11 @@ export default function Home() {
         setProfilePic(null);
         localStorage.removeItem('profilePic');
     } else {
-        if (!isChatsLoading && !activeChatId && chats?.length === 0) {
+        if (!isUserLoading && user && !isChatsLoading && chats?.length === 0 && !activeChatId) {
             handleNewChat();
-        } else if (!isChatsLoading && !activeChatId && chats && chats.length > 0) {
-            // No active chat is set, but chats exist. Don't auto-select one to show new chat screen.
         }
     }
-  }, [user, chats, isChatsLoading, activeChatId]);
+  }, [user, isUserLoading, chats, isChatsLoading, activeChatId]);
 
 
   useEffect(() => {
@@ -415,19 +413,12 @@ export default function Home() {
   });
 
   const handlePrompt = async (prompt: string) => {
-    let newChatId = activeChatId;
-    if (!activeChatId || (messages && messages.length > 0)) {
-        newChatId = await handleNewChat();
-    }
-    
-    if (newChatId) {
-        setActiveChatId(newChatId);
-        form.setValue('question', prompt);
-        // Use a timeout to ensure state updates before submitting
-        setTimeout(() => {
-            form.handleSubmit((data) => onSubmit(data))();
-        }, 0);
-    }
+    setActiveChatId(null); // Set to null to show new chat screen
+    form.setValue('question', prompt);
+    // Use a timeout to ensure state updates before submitting
+    setTimeout(() => {
+        form.handleSubmit((data) => onSubmit(data))();
+    }, 0);
   };
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>, isSettings: boolean = false) => {
@@ -537,13 +528,14 @@ export default function Home() {
     });
   };
 
-  const addMessage = async (message: Omit<Message, 'id' | 'createdAt'>) => {
-    if (!messagesRef) return null;
+  const addMessage = async (chatId: string, message: Omit<Message, 'id' | 'createdAt'>) => {
+    if (!user) return null;
+    const messagesCollectionRef = collection(firestore, 'users', user.uid, 'chats', chatId, 'messages');
     const messageData: { [key: string]: any } = { ...message, createdAt: serverTimestamp() };
     if (messageData.fileDataUri === undefined) {
       delete messageData.fileDataUri;
     }
-    return await addDoc(messagesRef, messageData);
+    return await addDoc(messagesCollectionRef, messageData);
   };
 
 
@@ -552,7 +544,14 @@ export default function Home() {
     if (!question || !user) return;
 
     let currentChatId = activeChatId;
-    if (!currentChatId) {
+
+    // Create a new chat if there's no active one, or if the active one already has messages.
+    if (!currentChatId || (messages && messages.length > 0 && activeChatId)) {
+        const newChatId = await handleNewChat();
+        if (!newChatId) return; // Stop if chat creation failed
+        currentChatId = newChatId;
+    } else if (!currentChatId) {
+        // This case handles when the page loads for the first time for a new user
         const newChatId = await handleNewChat();
         if (!newChatId) return;
         currentChatId = newChatId;
@@ -574,7 +573,7 @@ export default function Home() {
     }
 
     if (question.trim().toLowerCase() === 'studentprogram') {
-        await addMessage({
+        await addMessage(currentChatId, {
             role: 'system',
             content: 'Displaying student programs.',
             programs: studentPrograms,
@@ -592,7 +591,7 @@ export default function Home() {
         fileInputRef.current.value = '';
     }
 
-    await addMessage({ role: 'user', content: question, fileDataUri: currentFileDataUri });
+    await addMessage(currentChatId, { role: 'user', content: question, fileDataUri: currentFileDataUri });
     
     setIsPending(true);
     abortControllerRef.current = new AbortController();
@@ -607,7 +606,7 @@ export default function Home() {
             if (error) throw new Error(error);
             if (!imageUrl) throw new Error('Image generation failed to return an image.');
             
-            await addMessage({ 
+            await addMessage(currentChatId, { 
                 role: 'assistant', 
                 content: `> ${prompt}`,
                 imageUrl: imageUrl, 
@@ -621,7 +620,7 @@ export default function Home() {
             if (error) throw new Error(error);
             if (!quiz) throw new Error('Quiz generation failed to return a quiz.');
 
-            await addMessage({
+            await addMessage(currentChatId, {
                 role: 'assistant', 
                 content: `Quiz on: ${topic}`, 
                 quiz: quiz,
@@ -631,7 +630,7 @@ export default function Home() {
             const { answer, error } = await getAnswer(question, currentFileDataUri, signal);
             if (error) throw new Error(error);
       
-            await addMessage({ role: 'assistant', content: answer });
+            await addMessage(currentChatId, { role: 'assistant', content: answer });
         }
 
     } catch (error) {
@@ -639,7 +638,7 @@ export default function Home() {
         console.log('Request was aborted.');
       } else {
         const errorMessageContent = error instanceof Error ? error.message : 'An unknown error occurred.';
-        await addMessage({ role: 'error', content: errorMessageContent });
+        await addMessage(currentChatId, { role: 'error', content: errorMessageContent });
 
         toast({
           variant: 'destructive',
@@ -784,7 +783,7 @@ export default function Home() {
         <div className="flex h-svh w-full bg-background">
             <Sidebar collapsible="icon" className="border-r-0 md:bg-card/50 backdrop-blur-sm md:border-r">
                 <SidebarHeader>
-                  <Button variant="ghost" className="w-full justify-start h-10" onClick={() => { setActiveChatId(null); handleNewChat(); }} disabled={!user}>
+                  <Button variant="ghost" className="w-full justify-start h-10" onClick={() => { setActiveChatId(null); }} disabled={!user}>
                     <MessageSquarePlus className="mr-2" />
                     New Chat
                   </Button>
@@ -845,7 +844,7 @@ export default function Home() {
                 <main className="flex-1 overflow-hidden">
                     <ScrollArea className="h-full" viewportRef={scrollAreaViewportRef}>
                         <div className="mx-auto max-w-3xl px-4 md:px-6">
-                        {(!messages || messages.length === 0) && !isPending && (!isMessagesLoading || !activeChatId) ? (
+                        {(!messages || messages.length === 0) && !isPending && (!isMessagesLoading || !activeChatId) && !activeChatId ? (
                             <div className="flex flex-col items-center justify-center h-full min-h-[calc(100vh-14rem)]">
                                 <Card className="w-full max-w-2xl text-center shadow-none border-0 bg-transparent">
                                     <CardHeader className="gap-2">
@@ -1139,4 +1138,3 @@ export default function Home() {
   );
 }
 
-    
