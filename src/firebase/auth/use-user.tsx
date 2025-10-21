@@ -13,7 +13,7 @@ export interface UserHookResult {
 }
 
 export const useUser = (): UserHookResult => {
-  const { user, isUserLoading, userError, firestore } = useFirebase();
+  const { user, isUserLoading: isAuthLoading, userError, firestore } = useFirebase();
   
   const adminDocRef = useMemo(() => {
     if (!user || !firestore) return null;
@@ -24,7 +24,8 @@ export const useUser = (): UserHookResult => {
 
   const isAdmin = useMemo(() => !!adminData, [adminData]);
 
-  const isLoading = isUserLoading || (user ? isAdminLoading : false);
+  // The overall loading state is true if auth is loading OR if the user is logged in but the admin check is still loading.
+  const isUserLoading = isAuthLoading || (user ? isAdminLoading : false);
 
-  return { user, isAdmin, isUserLoading: isLoading, userError };
+  return { user, isAdmin, isUserLoading, userError };
 };
