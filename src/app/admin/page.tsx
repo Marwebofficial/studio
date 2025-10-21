@@ -43,7 +43,6 @@ const AdminDashboard = () => {
     const firestore = useFirestore();
     const auth = useAuth();
     
-    // --- Refactored Data Fetching using useCollection ---
     const usersRef = useMemoFirebase(() => collection(firestore, 'users'), [firestore]);
     const { data: users, isLoading: isLoadingUsers } = useCollection(usersRef);
 
@@ -58,7 +57,6 @@ const AdminDashboard = () => {
     
     const isLoading = isLoadingUsers || isLoadingAdmins || isLoadingLogs;
 
-    // --- Memoized Stats and Chart Data ---
     const stats = useMemo(() => ({
         totalUsers: users?.length || 0,
         totalAdmins: admins?.length || 0,
@@ -286,7 +284,7 @@ export default function AdminPage() {
                 </CardContent>
             </Card>
         </div>
-    )
+    );
   }
 
   if (!isAdmin) {
@@ -306,11 +304,9 @@ export default function AdminPage() {
                 </CardContent>
             </Card>
         </div>
-    )
+    );
   }
 
   // Only render the full dashboard if the user is a verified admin
   return <AdminDashboard />;
 }
-
-    
