@@ -385,7 +385,7 @@ export default function Home() {
   }, [studentPrograms]);
   
   const handleNewChat = async () => {
-    if (!user || isUserLoading) return null;
+    if (!user || !chatsRef) return null;
     const newChatRef = await addDoc(chatsRef!, {
         createdAt: serverTimestamp(),
         title: 'New Chat',
@@ -811,7 +811,7 @@ export default function Home() {
                                             <User />
                                         </AvatarFallback>
                                     </Avatar>
-                                    <span className="text-sm text-muted-foreground hidden md:inline">{user.email}</span>
+                                    <span className="text-sm text-muted-foreground hidden md:inline">{user.displayName || user.email}</span>
                                 </button>
                                 <input type="file" accept="image/*" ref={profilePicInputRef} onChange={handleProfilePicChange} className="hidden" />
 
@@ -875,7 +875,7 @@ export default function Home() {
                         <div className="space-y-6 pt-6 pb-12">
                             {isMessagesLoading && activeChatId && [...Array(3)].map((_, i) => <LoadingMessage key={i} />)}
                             {messages && messages.map((message, index) => {
-                                const isLastMessage = index === messages.length - 1 && isPending;
+                                const isLastMessage = index === messages.length - 1;
                                 if (message.role === 'user') {
                                     const createdAt = message.createdAt?.toDate ? message.createdAt.toDate().toISOString() : new Date().toISOString();
                                     return <UserMessage key={message.id} content={message.content as string} fileDataUri={message.fileDataUri} createdAt={createdAt} profilePic={profilePic} />;
@@ -1128,6 +1128,3 @@ export default function Home() {
     </SidebarProvider>
   );
 }
-
-
-    

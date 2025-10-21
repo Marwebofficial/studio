@@ -8,7 +8,7 @@ import * as z from 'zod';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { GraduationCap } from 'lucide-react';
-import { createUserWithEmailAndPassword } from 'firebase/auth';
+import { createUserWithEmailAndPassword, updateProfile } from 'firebase/auth';
 import { doc, setDoc, collection, addDoc, serverTimestamp, writeBatch } from 'firebase/firestore';
 
 import { Button } from '@/components/ui/button';
@@ -33,6 +33,7 @@ import { useAuth, useFirestore, errorEmitter, FirestorePermissionError } from '@
 import { FirebaseError } from 'firebase/app';
 
 const formSchema = z.object({
+  displayName: z.string().min(1, { message: 'Please enter your name.' }),
   email: z.string().email({ message: 'Please enter a valid email.' }),
   password: z
     .string()
@@ -52,6 +53,7 @@ export default function SignUpPage() {
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
     defaultValues: {
+      displayName: '',
       email: '',
       password: '',
       adminCode: '',
@@ -68,13 +70,19 @@ export default function SignUpPage() {
       );
 
       const user = userCredential.user;
+      
+      // Update Firebase Auth profile
+      await updateProfile(user, {
+        displayName: values.displayName
+      });
+      
       const batch = writeBatch(firestore);
 
       // Create user profile document
       const userRef = doc(firestore, 'users', user.uid);
       const userData = { 
         email: user.email,
-        displayName: user.displayName,
+        displayName: values.displayName,
         createdAt: serverTimestamp(),
       };
       batch.set(userRef, userData);
@@ -170,12 +178,29 @@ export default function SignUpPage() {
             </div>
           <CardTitle className="text-2xl">Create an Account</CardTitle>
           <CardDescription>
-            Enter your email and password to get started.
+            Enter your details below to get started.
           </CardDescription>
         </CardHeader>
         <CardContent>
           <Form {...form}>
             <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+              <FormField
+                control={form.control}
+                name="displayName"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Name</FormLabel>
+                    <FormControl>
+                      <Input
+                        placeholder="John Doe"
+                        {...field}
+                        disabled={isSubmitting}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
               <FormField
                 control={form.control}
                 name="email"

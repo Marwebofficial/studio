@@ -25,7 +25,7 @@ export const useUser = (): UserHookResult => {
   const isAdmin = useMemo(() => !!adminData, [adminData]);
 
   // The overall loading state is true if auth is loading OR if the user is logged in but the admin check is still loading.
-  const isUserLoading = isAuthLoading || (user ? isAdminLoading : false);
+  const isUserLoading = isAuthLoading || (!!user && isAdminLoading);
 
   return { user, isAdmin, isUserLoading, userError };
 };

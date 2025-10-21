@@ -170,6 +170,7 @@ const AdminDashboard = () => {
                     <TableHeader>
                         <TableRow>
                             <TableHead>User</TableHead>
+                            <TableHead>Email</TableHead>
                             <TableHead>Signed Up</TableHead>
                         </TableRow>
                     </TableHeader>
@@ -182,6 +183,7 @@ const AdminDashboard = () => {
                                         <Skeleton className="h-4 w-32" />
                                     </div>
                                 </TableCell>
+                                <TableCell><Skeleton className="h-4 w-40" /></TableCell>
                                 <TableCell><Skeleton className="h-4 w-24" /></TableCell>
                             </TableRow>
                         )) : (users || []).map(user => (
@@ -189,11 +191,12 @@ const AdminDashboard = () => {
                                 <TableCell>
                                     <div className="flex items-center gap-3">
                                         <Avatar>
-                                            <AvatarFallback>{user.email.substring(0, 2).toUpperCase()}</AvatarFallback>
+                                            <AvatarFallback>{user.displayName?.substring(0, 2).toUpperCase() || user.email.substring(0, 2).toUpperCase()}</AvatarFallback>
                                         </Avatar>
-                                        <p className="font-medium">{user.email}</p>
+                                        <p className="font-medium">{user.displayName || 'N/A'}</p>
                                     </div>
                                 </TableCell>
+                                <TableCell className="text-muted-foreground">{user.email}</TableCell>
                                 <TableCell className="text-muted-foreground">
                                     {user.createdAt ? format((user.createdAt as Timestamp).toDate(), 'PP') : 'N/A'}
                                 </TableCell>
@@ -266,7 +269,7 @@ export default function AdminPage() {
             </div>
         );
     }
-
+  
     if (user && isAdmin) {
         return <AdminDashboard />;
     }
@@ -310,4 +313,3 @@ export default function AdminPage() {
         </div>
     );
 }
-
