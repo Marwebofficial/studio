@@ -1,144 +1,137 @@
+/**
+ * @fileoverview Firestore Security Rules for the application.
+ *
+ * Core Philosophy:
+ * This ruleset enforces a strict user-ownership model for user profiles and chats.
+ * Admin roles are supported, allowing admins to read activity logs.
+ *
+ * Data Structure:
+ * - /users/{userId}: User profile information, owned by the user.
+ * - /admins/{userId}: Admin user information, read-only for non-admins.
+ * - /activity_logs/{logId}: Activity logs, readable by admins only.
+ * - /users/{userId}/chats/{chatId}: Chat sessions for a user, owned by the user.
+ * - /users/{userId}/chats/{chatId}/messages/{messageId}: Messages within a chat session, owned by the user.
+ *
+ * Key Security Decisions:
+ * - Users can only read and write their own profile data.
+ * - Only admins can read activity logs.
+ * - Users can only create, read, update, and delete their own chats and messages.
+ * - Listing of users and admins is disallowed.
+ */
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
     /**
-     * @description Controls access to user profile information.
+     * @description Allows users to manage their own profile.
      * @path /users/{userId}
-     * @allow (get, list, create, update, delete) if the user is the owner of the profile.
-     * @deny (get, list, create, update, delete) if the user is not the owner of the profile.
-     * @principle Enforces document ownership for all operations.
+     * @allow (create) User with ID 'user123' creates their profile.
+     * @allow (get) User with ID 'user123' reads their profile.
+     * @allow (update) User with ID 'user123' updates their profile.
+     * @allow (delete) User with ID 'user123' deletes their profile.
+     * @deny (create) User with ID 'user123' tries to create profile for 'user456'.
+     * @deny (update) User with ID 'user123' tries to update profile for 'user456'.
+     * @deny (delete) User with ID 'user123' tries to delete profile for 'user456'.
+     * @principle Enforces document ownership for writes.
      */
     match /users/{userId} {
-      //function to check if user is signed in.
-      function isSignedIn() {
-        return request.auth != null;
-      }
-
-      //function to check if user is the owner.
-      function isOwner(userId) {
-        return request.auth.uid == userId;
-      }
-
-      //function to check if user is an existing owner.
-      function isExistingOwner(userId) {
-        return isSignedIn() && isOwner(userId);
-      }
-
-      allow get: if isSignedIn() && isOwner(userId);
-      allow list: if isSignedIn() && isOwner(userId);
-      allow create: if isSignedIn() && isOwner(userId);
-      allow update: if isExistingOwner(userId);
+      allow get: if isOwner(userId);
+      allow list: if false;
+      allow create: if isOwner(userId) && request.resource.data.email is string && request.auth.token.email == request.resource.data.email;
+      allow update: if isExistingOwner(userId) && request.resource.data.email == resource.data.email;
       allow delete: if isExistingOwner(userId);
     }
 
     /**
-     * @description Controls access to admin user information.
+     * @description Allows admins to read admin profiles, but prevents listing all admins.
      * @path /admins/{userId}
-     * @allow (get, list, create, update, delete) if the user is an admin.
-     * @deny (get, list, create, update, delete) if the user is not an admin.
-     * @principle Restricts access to admin-level data.
+     * @allow (get) Admin with ID 'admin123' reads their profile.
+     * @deny (create) Non-admin user tries to create an admin profile.
+     * @deny (update) Non-admin user tries to update an admin profile.
+     * @deny (delete) Non-admin user tries to delete an admin profile.
+     * @principle Restricts admin profile access and disallows listing.
      */
     match /admins/{userId} {
-        //function to check if user is signed in.
-      function isSignedIn() {
-        return request.auth != null;
-      }
-
-      //function to check if user is the owner.
-      function isOwner(userId) {
-        return request.auth.uid == userId;
-      }
-
-      //function to check if user is an existing owner.
-      function isAdmin() {
-        return false;
-      }
-
-      allow get: if false; // Deny all read operations.
-      allow list: if false; // Deny all read operations.
-      allow create: if false; // Deny all write operations.
-      allow update: if false; // Deny all write operations.
-      allow delete: if false; // Deny all write operations.
+      allow get: if isSignedIn();
+      allow list: if false;
+      allow create: if false;
+      allow update: if false;
+      allow delete: if false;
     }
 
     /**
-     * @description Controls access to activity logs.
+     * @description Allows admins to read activity logs.
      * @path /activity_logs/{logId}
-     * @allow (get, list, create, update, delete) if the user is an admin.
-     * @deny (get, list, create, update, delete) if the user is not an admin.
-     * @principle Restricts access to administrative data.
+     * @allow (get) Admin reads an activity log.
+     * @allow (list) Admin lists activity logs.
+     * @deny (create) Non-admin user tries to create an activity log.
+     * @deny (update) Non-admin user tries to update an activity log.
+     * @deny (delete) Non-admin user tries to delete an activity log.
+     * @principle Restricts activity log access to admins.
      */
     match /activity_logs/{logId} {
-      function isAdmin() {
-        return false;
-      }
-
-      allow get: if false; // Deny all read operations.
-      allow list: if false; // Deny all read operations.
-      allow create: if false; // Deny all write operations.
-      allow update: if false; // Deny all write operations.
-      allow delete: if false; // Deny all write operations.
+      allow get: if isAdmin();
+      allow list: if isAdmin();
+      allow create: if false;
+      allow update: if false;
+      allow delete: if false;
     }
 
     /**
-     * @description Controls access to chat sessions for a user.
+     * @description Allows users to manage their own chats.
      * @path /users/{userId}/chats/{chatId}
-     * @allow (get, list, create, update, delete) if the user is the owner of the chat.
-     * @deny (get, list, create, update, delete) if the user is not the owner of the chat.
-     * @principle Enforces document ownership for all operations.
+     * @allow (create) User with ID 'user123' creates a chat.
+     * @allow (get) User with ID 'user123' reads a chat.
+     * @allow (update) User with ID 'user123' updates a chat.
+     * @allow (delete) User with ID 'user123' deletes a chat.
+     * @deny (create) User with ID 'user123' tries to create a chat for 'user456'.
+     * @deny (update) User with ID 'user123' tries to update a chat for 'user456'.
+     * @deny (delete) User with ID 'user123' tries to delete a chat for 'user456'.
+     * @principle Enforces document ownership for writes within the user's chat collection.
      */
     match /users/{userId}/chats/{chatId} {
-      //function to check if user is signed in.
-      function isSignedIn() {
-        return request.auth != null;
-      }
-
-      //function to check if user is the owner.
-      function isOwner(userId) {
-        return request.auth.uid == userId;
-      }
-
-      //function to check if user is an existing owner.
-      function isExistingOwner(userId) {
-        return isSignedIn() && request.auth.uid == resource.data.owner_uid;
-      }
-
-      allow get: if isSignedIn() && isOwner(userId);
-      allow list: if isSignedIn() && isOwner(userId);
-      allow create: if isSignedIn() && request.auth.uid == request.resource.data.owner_uid;
+      allow get: if isOwner(userId);
+      allow list: if isOwner(userId);
+      allow create: if isOwner(userId);
       allow update: if isExistingOwner(userId);
       allow delete: if isExistingOwner(userId);
     }
 
     /**
-     * @description Controls access to messages within a specific chat session.
+     * @description Allows users to manage messages within their own chats.
      * @path /users/{userId}/chats/{chatId}/messages/{messageId}
-     * @allow (get, list, create, update, delete) if the user is the owner of the chat.
-     * @deny (get, list, create, update, delete) if the user is not the owner of the chat.
-     * @principle Enforces document ownership for all operations.
+     * @allow (create) User with ID 'user123' creates a message in their chat.
+     * @allow (get) User with ID 'user123' reads a message in their chat.
+     * @allow (update) User with ID 'user123' updates a message in their chat.
+     * @allow (delete) User with ID 'user123' deletes a message in their chat.
+     * @deny (create) User with ID 'user123' tries to create a message in another user's chat.
+     * @deny (update) User with ID 'user123' tries to update a message in another user's chat.
+     * @deny (delete) User with ID 'user123' tries to delete a message in another user's chat.
+     * @principle Enforces document ownership for writes within the user's chat message collection.
      */
     match /users/{userId}/chats/{chatId}/messages/{messageId} {
-      //function to check if user is signed in.
-      function isSignedIn() {
-        return request.auth != null;
-      }
-
-      //function to check if user is the owner.
-      function isOwner(userId) {
-        return request.auth.uid == userId;
-      }
-
-      //function to check if user is an existing owner.
-      function isExistingOwner(userId) {
-        return isSignedIn() && request.auth.uid == resource.data.owner_uid;
-      }
-
-      allow get: if isSignedIn() && isOwner(userId);
-      allow list: if isSignedIn() && isOwner(userId);
-      allow create: if isSignedIn() && request.auth.uid == request.resource.data.owner_uid;
+      allow get: if isOwner(userId);
+      allow list: if isOwner(userId);
+      allow create: if isOwner(userId);
       allow update: if isExistingOwner(userId);
       allow delete: if isExistingOwner(userId);
+    }
+
+    // Helper functions
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return request.auth.uid == userId;
+    }
+
+    function isExistingOwner(userId) {
+        return isOwner(userId) && resource != null;
+    }
+
+    function isAdmin() {
+      return get(/databases/$(database)/documents/admins/$(request.auth.uid)).data.isAdmin == true;
     }
   }
 }
