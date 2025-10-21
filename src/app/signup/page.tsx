@@ -9,7 +9,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { GraduationCap } from 'lucide-react';
 import { createUserWithEmailAndPassword } from 'firebase/auth';
-import { doc, setDoc, collection, addDoc, serverTimestamp } from 'firebase/firestore';
+import { doc, setDoc, collection, addDoc, serverTimestamp, writeBatch } from 'firebase/firestore';
 
 import { Button } from '@/components/ui/button';
 import {
@@ -68,6 +68,7 @@ export default function SignUpPage() {
       );
 
       const user = userCredential.user;
+      const batch = writeBatch(firestore);
 
       // Create user profile document
       const userRef = doc(firestore, 'users', user.uid);
@@ -76,44 +77,59 @@ export default function SignUpPage() {
         displayName: user.displayName,
         createdAt: serverTimestamp(),
       };
-      await setDoc(userRef, userData);
+      batch.set(userRef, userData);
       
       // Log activity
       const activityLogsRef = collection(firestore, 'activity_logs');
-      await addDoc(activityLogsRef, {
+      const activityLogData = {
         userId: user.uid,
         userEmail: user.email,
         activityType: 'signup',
         timestamp: serverTimestamp(),
-      });
+      };
+      const activityLogRef = doc(activityLogsRef); // Create a doc with a random ID
+      batch.set(activityLogRef, activityLogData);
       
+      let isAdmin = false;
       if (values.adminCode) {
         if (values.adminCode === ADMIN_CODE) {
           const adminRef = doc(firestore, 'admins', user.uid);
           const adminData = { isAdmin: true };
-          
-          await setDoc(adminRef, adminData);
-
-          toast({
-            title: 'Admin Account Created',
-            description: "You've been successfully signed up as an admin.",
-          });
-          router.push('/');
+          batch.set(adminRef, adminData);
+          isAdmin = true;
         } else {
-            toast({
+             toast({
                 variant: 'destructive',
                 title: 'Invalid Admin Code',
                 description: "Your account was created, but the admin code was incorrect.",
             });
-            router.push('/');
         }
-      } else {
+      }
+
+      await batch.commit().catch(serverError => {
+        // Since this is a batch, we can't know which operation failed.
+        // We will create a generic but still contextual error.
+        const permissionError = new FirestorePermissionError({
+            path: `users/${user.uid} or subcollections`,
+            operation: 'write',
+            requestResourceData: { userData, activityLogData },
+        });
+        errorEmitter.emit('permission-error', permissionError);
+      });
+
+       if (isAdmin) {
+          toast({
+            title: 'Admin Account Created',
+            description: "You've been successfully signed up as an admin.",
+          });
+       } else if (!values.adminCode) {
          toast({
             title: 'Account Created',
             description: "You've been successfully signed up and logged in.",
         });
+       }
         router.push('/');
-      }
+
     } catch (error) {
       let errorMessage = 'An unexpected error occurred. Please try again.';
       if (error instanceof FirebaseError) {

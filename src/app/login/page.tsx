@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState } from 'react';
@@ -29,7 +30,7 @@ import {
 } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
 import { useToast } from '@/hooks/use-toast';
-import { useAuth, useFirestore } from '@/firebase';
+import { useAuth, useFirestore, errorEmitter, FirestorePermissionError } from '@/firebase';
 import { FirebaseError } from 'firebase/app';
 
 
@@ -60,12 +61,21 @@ export default function LoginPage() {
       
       // Log activity
       const activityLogsRef = collection(firestore, 'activity_logs');
-      await addDoc(activityLogsRef, {
+      const activityLogData = {
         userId: userCredential.user.uid,
         userEmail: userCredential.user.email,
         activityType: 'login',
         timestamp: serverTimestamp(),
-      });
+      };
+      addDoc(activityLogsRef, activityLogData)
+        .catch(serverError => {
+            const permissionError = new FirestorePermissionError({
+                path: activityLogsRef.path,
+                operation: 'create',
+                requestResourceData: activityLogData,
+            });
+            errorEmitter.emit('permission-error', permissionError);
+        });
       
       toast({
         title: 'Login Successful',
