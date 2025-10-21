@@ -514,7 +514,15 @@ const handleProfilePicUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     let currentChatId = activeChatId;
     if (!user) return;
     
-    setMessages(prev => [...prev, { id: Date.now().toString(), role: 'user', content: fullCommand, createdAt: new Date().toISOString() }]);
+    // Optimistically create user message
+    const userMessage: Message = {
+      id: Date.now().toString(),
+      role: 'user',
+      content: fullCommand,
+      createdAt: new Date().toISOString(),
+    };
+    setMessages(prev => [...prev, userMessage]);
+
 
     if (activeChatId === 'new') {
         const chatsRef = collection(firestore, 'users', user.uid, 'chats');
@@ -525,11 +533,17 @@ const handleProfilePicUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
         const docRef = await addDoc(chatsRef, newChat);
         currentChatId = docRef.id;
         setActiveChatId(docRef.id);
+
+        const messagesRef = collection(firestore, 'users', user.uid, 'chats', currentChatId, 'messages');
+        await addDoc(messagesRef, { ...userMessage, createdAt: serverTimestamp() });
+    } else if (currentChatId) {
+        const messagesRef = collection(firestore, 'users', user.uid, 'chats', currentChatId, 'messages');
+        await addDoc(messagesRef, { ...userMessage, createdAt: serverTimestamp() });
     }
+
 
     if (!currentChatId || currentChatId === 'new') return;
     const messagesRef = collection(firestore, 'users', user.uid, 'chats', currentChatId, 'messages');
-    await addDoc(messagesRef, { role: 'user', content: fullCommand, createdAt: serverTimestamp() });
     
     setIsPending(true);
 
@@ -567,15 +581,14 @@ const handleProfilePicUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!user) return;
     try {
         const userDocRef = doc(firestore, 'users', user.uid);
-        updateProfile(user, { displayName: values.displayName });
-        updateDoc(userDocRef, { displayName: values.displayName });
+        await updateProfile(user, { displayName: values.displayName });
+        await updateDoc(userDocRef, { displayName: values.displayName });
 
         toast({
             title: 'Profile Updated',
             description: `Your name has been set to ${values.displayName}.`,
         });
         setIsUpdateProfileOpen(false);
-        updateProfileForm.reset();
     } catch (error) {
         console.error("Error updating profile:", error);
         toast({
@@ -599,23 +612,9 @@ const handleProfilePicUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
         return;
     }
     
-    const userMessage: Message = {
-      id: Date.now().toString(),
-      role: 'user',
-      content: data.question,
-      createdAt: new Date().toISOString(),
-      fileDataUri: fileDataUri
-    };
-    
     let currentChatId = activeChatId;
     
-    // Optimistically update UI
-    setMessages(prev => [...prev, userMessage]);
-    form.reset();
-    setFileDataUri(undefined);
-    setFileName(undefined);
-
-
+    // Create new chat in Firestore if it's the first message
     if (activeChatId === 'new') {
         const chatsRef = collection(firestore, 'users', user.uid, 'chats');
         const newChat = {
@@ -625,15 +624,33 @@ const handleProfilePicUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
         const docRef = await addDoc(chatsRef, newChat);
         currentChatId = docRef.id;
         setActiveChatId(docRef.id);
-        
-        const messagesRef = collection(firestore, 'users', user.uid, 'chats', currentChatId, 'messages');
-        await addDoc(messagesRef, { ...userMessage, createdAt: serverTimestamp() });
-    } else if (currentChatId) {
-        const messagesRef = collection(firestore, 'users', user.uid, 'chats', currentChatId, 'messages');
-        await addDoc(messagesRef, { ...userMessage, createdAt: serverTimestamp() });
     }
 
-    if (!currentChatId || currentChatId === 'new') return;
+    if (!currentChatId || currentChatId === 'new') return; // Should not happen after the above block
+
+    const userMessage: Message = {
+      id: Date.now().toString(),
+      role: 'user',
+      content: data.question,
+      createdAt: new Date().toISOString(),
+      fileDataUri: fileDataUri
+    };
+    
+    // Optimistically update UI
+    setMessages(prev => [...prev, userMessage]);
+    form.reset();
+    setFileDataUri(undefined);
+    setFileName(undefined);
+
+    // Save user message to Firestore
+    const messagesRef = collection(firestore, 'users', user.uid, 'chats', currentChatId, 'messages');
+    await addDoc(messagesRef, {
+        role: 'user',
+        content: data.question,
+        fileDataUri: fileDataUri || null,
+        createdAt: serverTimestamp()
+    });
+
 
     setIsPending(true);
     
@@ -641,7 +658,6 @@ const handleProfilePicUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { answer, error } = await getAnswer(data.question, fileDataUri, abortControllerRef.current.signal);
     abortControllerRef.current = null;
     
-    const messagesRef = collection(firestore, 'users', user.uid, 'chats', currentChatId, 'messages');
     if (error) {
       await addDoc(messagesRef, { role: 'error', content: error, createdAt: serverTimestamp() });
     } else {
@@ -718,33 +734,20 @@ const handleProfilePicUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
             <Button variant="ghost" className="w-full border justify-start" onClick={handleNewChat}>
                 <MessageSquarePlus className="mr-2" /> New Chat
             </Button>
-            <ScrollArea className="flex-1 my-4 -mx-2">
+            <div className="flex-1 my-4">
+              {activeChatId !== 'new' && chats && (
                 <div className="px-2 space-y-1">
-                    {isChatsLoading ? (
-                        [...Array(5)].map((_, i) => <Skeleton key={i} className="h-8 w-full" />)
-                    ) : (
-                        chats?.map(chat => (
-                            <div key={chat.id} className="group relative">
-                                <Button
-                                    variant="ghost"
-                                    className={cn(
-                                        "w-full justify-start truncate",
-                                        activeChatId === chat.id && "bg-accent/20"
-                                    )}
-                                    onClick={() => handleSelectChat(chat.id)}
-                                >
-                                    {chat.title}
-                                </Button>
-                                <div className="absolute top-1/2 -translate-y-1/2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                                    <Button variant="ghost" size="icon" className="h-7 w-7" onClick={(e) => { e.stopPropagation(); setChatToDelete(chat.id)}}>
-                                        <Trash className="h-4 w-4 text-destructive" />
-                                    </Button>
-                                </div>
-                            </div>
-                        ))
-                    )}
+                  <h3 className="px-2 text-xs font-semibold text-muted-foreground tracking-wider">CURRENT CHAT</h3>
+                  <Button
+                      variant="ghost"
+                      className={cn("w-full justify-start truncate bg-accent/20")}
+                      onClick={() => handleSelectChat(activeChatId)}
+                  >
+                      {activeChatTitle}
+                  </Button>
                 </div>
-            </ScrollArea>
+              )}
+            </div>
           </SidebarContent>
           <SidebarFooter>
             <div className="p-2 space-y-2">
@@ -773,7 +776,7 @@ const handleProfilePicUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
         </Sidebar>
 
         <main className="flex-1 flex flex-col h-svh bg-transparent">
-            <header className="flex items-center justify-between p-4 border-b bg-background/50 backdrop-blur-lg">
+            <header className="flex items-center justify-between p-4 border-b bg-background/50 backdrop-blur-lg md:pl-0">
                 <SidebarTrigger className="md:hidden"/>
                 <h1 className="text-lg font-semibold tracking-tight truncate flex-1 text-center">
                     {activeChatTitle}
@@ -839,7 +842,7 @@ const handleProfilePicUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
                                 <div className="flex items-center gap-2 text-sm text-muted-foreground truncate">
                                     <FileText className="h-4 w-4" />
                                     <span className="truncate">{fileName}</span>
-                                d</div>
+                                </div>
                                 <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => { setFileDataUri(undefined); setFileName(undefined);}}>
                                     <X className="h-4 w-4" />
                                 </Button>
@@ -883,3 +886,5 @@ const handleProfilePicUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     </>
   );
 }
+
+    
