@@ -68,6 +68,15 @@ export default function SignUpPage() {
       );
 
       const user = userCredential.user;
+
+      // Create user profile document
+      const userRef = doc(firestore, 'users', user.uid);
+      const userData = { 
+        email: user.email,
+        displayName: user.displayName,
+        createdAt: serverTimestamp(),
+      };
+      await setDoc(userRef, userData);
       
       // Log activity
       const activityLogsRef = collection(firestore, 'activity_logs');
@@ -106,7 +115,6 @@ export default function SignUpPage() {
         router.push('/');
       }
     } catch (error) {
-      console.error(error);
       let errorMessage = 'An unexpected error occurred. Please try again.';
       if (error instanceof FirebaseError) {
         switch (error.code) {

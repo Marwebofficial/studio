@@ -13,10 +13,16 @@
         "displayName": {
           "type": "string",
           "description": "The user's display name."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "The timestamp when the user was created."
         }
       },
       "required": [
-        "email"
+        "email",
+        "createdAt"
       ]
     },
     "Message": {
@@ -163,5 +169,3 @@
     }
   }
 }
-
-    
