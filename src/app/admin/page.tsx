@@ -1,4 +1,3 @@
-
 'use client';
 
 import { ShieldCheck, LayoutDashboard, LogOut, Users, UserPlus, LogIn as LogInIcon } from 'lucide-react';
