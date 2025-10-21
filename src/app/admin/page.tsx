@@ -1,17 +1,16 @@
+
 'use client';
 
-import { ShieldCheck, LayoutDashboard, LogOut, Users, UserPlus, LogIn as LogInIcon, Clock } from 'lucide-react';
+import { ShieldCheck, LayoutDashboard, LogOut, Users, UserPlus, LogIn as LogInIcon } from 'lucide-react';
 import Link from 'next/link';
-import { useMemo, useState, useEffect } from 'react';
-import { collection, query, orderBy, limit, getDocs, collectionGroup, where, Timestamp } from 'firebase/firestore';
+import { useMemo } from 'react';
+import { collection, query, orderBy, Timestamp } from 'firebase/firestore';
 import { format, subDays, startOfDay } from 'date-fns';
-
 
 import { Button } from '@/components/ui/button';
 import {
   Card,
   CardContent,
-  CardDescription,
   CardHeader,
   CardTitle,
 } from '@/components/ui/card';
@@ -23,7 +22,7 @@ import {
     TableHeader,
     TableRow,
   } from "@/components/ui/table"
-import { useUser, useFirestore } from '@/firebase';
+import { useUser, useFirestore, useCollection, useMemoFirebase } from '@/firebase';
 import { signOut } from 'firebase/auth';
 import { useAuth } from '@/firebase';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
@@ -41,69 +40,58 @@ import {
 
 const AdminDashboard = () => {
     const firestore = useFirestore();
-    const [activityLogs, setActivityLogs] = useState<any[]>([]);
-    const [users, setUsers] = useState<any[]>([]);
-    const [stats, setStats] = useState({ totalUsers: 0, totalAdmins: 0 });
-    const [signupData, setSignupData] = useState<any[]>([]);
-    const [isLoading, setIsLoading] = useState(true);
-
-    useEffect(() => {
-        const fetchData = async () => {
-            if (!firestore) return;
-            setIsLoading(true);
-            try {
-                // Fetch users and admins
-                const usersSnapshot = await getDocs(collection(firestore, 'users'));
-                const adminsSnapshot = await getDocs(collection(firestore, 'admins'));
-                
-                const usersList = usersSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-                
-                setUsers(usersList);
-                setStats({
-                    totalUsers: usersSnapshot.size,
-                    totalAdmins: adminsSnapshot.size
-                });
-
-                // Process signups for chart
-                const last7Days = Array.from({ length: 7 }, (_, i) => {
-                    const d = subDays(new Date(), i);
-                    return { date: format(d, 'MMM d'), count: 0 };
-                }).reverse();
-
-                const sevenDaysAgo = startOfDay(subDays(new Date(), 6));
-
-                usersList.forEach(user => {
-                    if (user.createdAt) {
-                        const signupDate = (user.createdAt as Timestamp).toDate();
-                        if (signupDate >= sevenDaysAgo) {
-                            const formattedDate = format(signupDate, 'MMM d');
-                            const day = last7Days.find(d => d.date === formattedDate);
-                            if (day) {
-                                day.count++;
-                            }
-                        }
-                    }
-                });
-                setSignupData(last7Days);
-
-                // Fetch activity logs
-                const logsRef = collection(firestore, 'activity_logs');
-                const logsQuery = query(logsRef, orderBy('timestamp', 'desc'), limit(10));
-                const logsSnapshot = await getDocs(logsQuery);
-                setActivityLogs(logsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-
-            } catch (error) {
-                console.error("Error fetching admin data:", error);
-            } finally {
-                setIsLoading(false);
-            }
-        };
-
-        fetchData();
-    }, [firestore]);
-
-
     const auth = useAuth();
+    
+    // --- Refactored Data Fetching using useCollection ---
+    const usersRef = useMemoFirebase(() => collection(firestore, 'users'), [firestore]);
+    const { data: users, isLoading: isLoadingUsers } = useCollection(usersRef);
+
+    const adminsRef = useMemoFirebase(() => collection(firestore, 'admins'), [firestore]);
+    const { data: admins, isLoading: isLoadingAdmins } = useCollection(adminsRef);
+
+    const logsQuery = useMemoFirebase(() => {
+        const logsRef = collection(firestore, 'activity_logs');
+        return query(logsRef, orderBy('timestamp', 'desc'));
+    }, [firestore]);
+    const { data: activityLogs, isLoading: isLoadingLogs } = useCollection(logsQuery);
+    
+    const isLoading = isLoadingUsers || isLoadingAdmins || isLoadingLogs;
+
+    // --- Memoized Stats and Chart Data ---
+    const stats = useMemo(() => ({
+        totalUsers: users?.length || 0,
+        totalAdmins: admins?.length || 0,
+    }), [users, admins]);
+
+    const signupData = useMemo(() => {
+        const last7Days = Array.from({ length: 7 }, (_, i) => {
+            const d = subDays(new Date(), i);
+            return { date: format(d, 'MMM d'), count: 0 };
+        }).reverse();
+
+        if (!users) return last7Days;
+
+        const sevenDaysAgo = startOfDay(subDays(new Date(), 6));
+
+        users.forEach(user => {
+            if (user.createdAt) {
+                const signupDate = (user.createdAt as Timestamp).toDate();
+                if (signupDate >= sevenDaysAgo) {
+                    const formattedDate = format(signupDate, 'MMM d');
+                    const day = last7Days.find(d => d.date === formattedDate);
+                    if (day) {
+                        day.count++;
+                    }
+                }
+            }
+        });
+        return last7Days;
+    }, [users]);
+    
+    const recentActivityLogs = useMemo(() => {
+        return activityLogs?.slice(0, 10) || [];
+    }, [activityLogs]);
+
     const handleLogout = async () => {
         await signOut(auth);
         window.location.href = '/';
@@ -195,7 +183,7 @@ const AdminDashboard = () => {
                                 </TableCell>
                                 <TableCell><Skeleton className="h-4 w-24" /></TableCell>
                             </TableRow>
-                        )) : users.map(user => (
+                        )) : (users || []).map(user => (
                             <TableRow key={user.id}>
                                 <TableCell>
                                     <div className="flex items-center gap-3">
@@ -237,7 +225,7 @@ const AdminDashboard = () => {
                                     </TableCell>
                                     <TableCell><Skeleton className="h-4 w-16" /></TableCell>
                                 </TableRow>
-                            )) : activityLogs.map(log => (
+                            )) : recentActivityLogs.map(log => (
                                 <TableRow key={log.id}>
                                     <TableCell>
                                         <div className="flex items-center gap-3">
@@ -320,3 +308,5 @@ export default function AdminPage() {
 
   return <AdminDashboard />;
 }
+
+    
