@@ -12,7 +12,7 @@ import Link from 'next/link';
 import { format } from 'date-fns';
 import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
-import { collection, query, where, orderBy, getDocs, addDoc, serverTimestamp, writeBatch, doc, updateDoc } from 'firebase/firestore';
+import { collection, query, where, orderBy, getDocs, addDoc, serverTimestamp, writeBatch, doc, updateDoc, Timestamp } from 'firebase/firestore';
 import { updateProfile } from 'firebase/auth';
 
 
@@ -89,8 +89,19 @@ const updateProfileFormSchema = z.object({
 });
 
 
-const UserMessage = ({ content, fileDataUri, createdAt, profilePic }: { content: string, fileDataUri?: string, createdAt: string, profilePic: string | null }) => {
+const UserMessage = ({ content, fileDataUri, createdAt, profilePic }: { content: string, fileDataUri?: string, createdAt: any, profilePic: string | null }) => {
     const isImage = fileDataUri?.startsWith('data:image');
+    
+    const formatDate = (dateValue: any) => {
+        if (!dateValue) return '';
+        // Firestore timestamps can be objects with seconds and nanoseconds
+        if (dateValue.seconds) {
+            return format(dateValue.toDate(), 'HH:mm');
+        }
+        // It might be an ISO string for optimistically rendered messages
+        return format(new Date(dateValue), 'HH:mm');
+    };
+
     return (
         <div className="flex items-start gap-3 justify-end">
           <div className="max-w-2xl w-full space-y-2">
@@ -113,7 +124,7 @@ const UserMessage = ({ content, fileDataUri, createdAt, profilePic }: { content:
               <p className="text-sm text-foreground">{content}</p>
             </div>
             <div className="text-xs text-muted-foreground text-right">
-                {createdAt ? format(new Date(createdAt), 'HH:mm') : ''}
+                {formatDate(createdAt)}
             </div>
           </div>
           <Avatar className="h-8 w-8 border-2 border-primary/50">
@@ -828,7 +839,7 @@ const handleProfilePicUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
                     ) : (
                         messages?.map((message, index) => {
                         if (message.role === 'user') {
-                            return <UserMessage key={message.id} content={message.content as string} fileDataUri={message.fileDataUri} createdAt={message.createdAt?.toString()} profilePic={profilePic} />;
+                            return <UserMessage key={message.id} content={message.content as string} fileDataUri={message.fileDataUri} createdAt={message.createdAt} profilePic={profilePic} />;
                         }
                         if (message.role === 'assistant') {
                             return <AssistantMessage key={message.id} message={message} isLastMessage={index === messages.length - 1} isPending={isPending} />;
@@ -924,4 +935,3 @@ const handleProfilePicUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
   );
 }
 
-    
