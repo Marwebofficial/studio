@@ -1,111 +1,56 @@
 rules_version = '2';
+
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    /**
-     * @description Controls access to user profile information.
-     * @path /users/{userId}
-     * @allow (create) - Authenticated user with matching userId can create their profile.
-     * @allow (get, update, delete) - Authenticated user with matching userId can read, update, or delete their profile.
-     * @deny (create, get, update, delete) - Any other user cannot access another user's profile.
-     * @principle Enforces document ownership for all operations on user profiles.
-     */
+    // Helper function to check if a user is an admin.
+    // This function checks for the existence of the user's UID in the /admins collection.
+    function isAdmin() {
+      return exists(/databases/$(database)/documents/admins/$(request.auth.uid));
+    }
+
+    // Rules for the 'users' collection
     match /users/{userId} {
-      function isOwner(userId) {
-        return request.auth != null && request.auth.uid == userId;
-      }
-      function isExistingOwner(userId) {
-          return request.auth != null && request.auth.uid == userId && resource.data != null;
-      }
-
-      allow get: if isOwner(userId);
-      allow list: if false;
-      allow create: if request.auth != null && request.auth.uid == userId;
-      allow update: if isExistingOwner(userId);
-      allow delete: if isExistingOwner(userId);
+      // Admins can get any single user document and list all users.
+      allow get, list: if isAdmin();
+      
+      // A user can create their own user document and read their own document.
+      // This is crucial for sign-up and for a user to view their own profile info.
+      allow create, read: if request.auth.uid == userId;
     }
 
-    /**
-     * @description Controls access to admin user information.
-     * @path /admins/{userId}
-     * @allow (get) - Only an admin user can read admin information.
-     * @deny (create, update, delete) - No one can create, update, or delete admin information directly through the client.  Admin roles are managed through a separate, secure backend process.
-     * @principle Restricts access to admin data to authorized admins only.
-     */
+    // Rules for the 'admins' collection
     match /admins/{userId} {
-        function isAdmin() {
-          return get(/databases/$(database)/documents/admins/$(request.auth.uid)).data.isAdmin == true;
-        }
+      // Admins can get any single admin document and list all admins.
+      // This is necessary for the admin dashboard to function correctly.
+      allow get, list: if isAdmin();
 
-        allow get: if request.auth != null && isAdmin();
-        allow list: if false;
-        allow create: if false;
-        allow update: if false;
-        allow delete: if false;
+      // Any authenticated user can attempt to read their OWN document in the admins collection.
+      // This is required for the `isAdmin()` check to work without permission errors for non-admins.
+      // The `||` combines this with the admin rule above.
+      allow get: if request.auth.uid == userId;
     }
-
-    /**
-     * @description Controls access to activity logs.
-     * @path /activity_logs/{logId}
-     * @allow (get, list) - Only admin users can read activity logs.
-     * @deny (create, update, delete) - No one can create, update, or delete activity logs directly.  Logs are created and managed by a separate backend process.
-     * @principle Restricts read access to activity logs to authorized admins only.
-     */
+    
+    // Rules for the 'activity_logs' collection
     match /activity_logs/{logId} {
-        function isAdmin() {
-          return get(/databases/$(database)/documents/admins/$(request.auth.uid)).data.isAdmin == true;
-        }
-        allow get: if request.auth != null && isAdmin();
-        allow list: if request.auth != null && isAdmin();
-        allow create: if false;
-        allow update: if false;
-        allow delete: if false;
+        // Admins can get and list all activity logs.
+        allow get, list: if isAdmin();
+        
+        // Any authenticated user can create an activity log.
+        // This is needed for logging sign-ups and logins.
+        allow create: if request.auth != null;
     }
 
-    /**
-     * @description Controls access to user chat sessions.
-     * @path /users/{userId}/chats/{chatId}
-     * @allow (create, get, list) - Authenticated user with matching userId can create, get, or list their own chat sessions.
-     * @deny (update, delete) - Chat update or delete is forbidden.
-     * @deny (create, get, list) - Other users cannot access this user's chat sessions.
-     * @principle Enforces document ownership for chat sessions.
-     */
+    // Rules for user-specific chats and messages
     match /users/{userId}/chats/{chatId} {
-      function isOwner(userId) {
-        return request.auth != null && request.auth.uid == userId;
-      }
-      function isExistingOwner(userId) {
-          return request.auth != null && request.auth.uid == userId && resource.data != null;
-      }
+      // A user can perform any action (create, read, update, delete) on chats that belong to them.
+      allow read, write: if request.auth.uid == userId;
 
-      allow get: if isOwner(userId);
-      allow list: if isOwner(userId);
-      allow create: if isOwner(userId);
-      allow update: if false;
-      allow delete: if false;
-    }
-
-    /**
-     * @description Controls access to messages within a specific chat session.
-     * @path /users/{userId}/chats/{chatId}/messages/{messageId}
-     * @allow (create, get, list) - Authenticated user with matching userId can create, get, or list messages in their chat sessions.
-     * @deny (update, delete) - Message update or delete is forbidden.
-     * @deny (create, get, list) - Other users cannot access this user's messages.
-     * @principle Enforces document ownership for messages within chat sessions.
-     */
-    match /users/{userId}/chats/{chatId}/messages/{messageId} {
-      function isOwner(userId) {
-        return request.auth != null && request.auth.uid == userId;
+      // This nested match applies to the messages subcollection.
+      match /messages/{messageId} {
+        // A user can perform any action on messages within their own chats.
+        allow read, write: if request.auth.uid == userId;
       }
-      function isExistingOwner(userId) {
-          return request.auth != null && request.auth.uid == userId && resource.data != null;
-      }
-
-      allow get: if isOwner(userId);
-      allow list: if isOwner(userId);
-      allow create: if isOwner(userId);
-      allow update: if false;
-      allow delete: if false;
     }
   }
 }
