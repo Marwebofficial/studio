@@ -267,6 +267,10 @@ export default function AdminPage() {
     );
   }
 
+  if (user && isAdmin) {
+    return <AdminDashboard />;
+  }
+  
   if (!user) {
     return (
         <div className="flex h-svh items-center justify-center p-4">
@@ -287,26 +291,22 @@ export default function AdminPage() {
     );
   }
 
-  if (!isAdmin) {
-    return (
-        <div className="flex h-svh items-center justify-center p-4">
-            <Card className="w-full max-w-sm text-center">
-                <CardHeader>
-                    <CardTitle>Access Denied</CardTitle>
-                    <CardDescription>
-                        You do not have permission to view this page.
-                    </CardDescription>
-                </CardHeader>
-                <CardContent>
-                    <Button asChild>
-                        <Link href="/">Go to Homepage</Link>
-                    </Button>
-                </CardContent>
-            </Card>
-        </div>
-    );
-  }
-
-  // Only render the full dashboard if the user is a verified admin
-  return <AdminDashboard />;
+  // This will be shown if the user is logged in but not an admin
+  return (
+      <div className="flex h-svh items-center justify-center p-4">
+          <Card className="w-full max-w-sm text-center">
+              <CardHeader>
+                  <CardTitle>Access Denied</CardTitle>
+                  <CardDescription>
+                      You do not have permission to view this page.
+                  </CardDescription>
+              </CardHeader>
+              <CardContent>
+                  <Button asChild>
+                      <Link href="/">Go to Homepage</Link>
+                  </Button>
+              </CardContent>
+          </Card>
+      </div>
+  );
 }
