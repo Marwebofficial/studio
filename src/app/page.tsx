@@ -318,7 +318,10 @@ export default function Home() {
   const firestore = useFirestore();
   const { user, isAdmin, isUserLoading } = useUser();
 
-  const [activeChatId, setActiveChatId] = useState<string | null>(null);
+  const [activeChatId, setActiveChatId] = useState<string | null>('new');
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [isMessagesLoading, setIsMessagesLoading] = useState(false);
+
   const [fileDataUri, setFileDataUri] = useState<string | undefined>();
   const [fileName, setFileName] = useState<string | undefined>();
   const [isPending, setIsPending] = useState(false);
@@ -335,31 +338,6 @@ export default function Home() {
   const [profilePic, setProfilePic] = useState<string | null>(null);
   const [isUpdateProfileOpen, setIsUpdateProfileOpen] = useState(false);
   const abortControllerRef = useRef<AbortController | null>(null);
-
-  // Firestore-backed chats state
-  const chatsRef = useMemoFirebase(() => {
-    if (!user) return null;
-    return collection(firestore, 'users', user.uid, 'chats');
-  }, [user, firestore]);
-
-  const chatsQuery = useMemoFirebase(() => {
-    if (!chatsRef) return null;
-    return query(chatsRef, orderBy('createdAt', 'desc'));
-  }, [chatsRef]);
-  
-  const { data: chats, isLoading: isChatsLoading } = useCollection<Chat>(chatsQuery);
-
-  const messagesRef = useMemoFirebase(() => {
-    if (!user || !activeChatId) return null;
-    return collection(firestore, 'users', user.uid, 'chats', activeChatId, 'messages');
-  }, [user, activeChatId, firestore]);
-
-  const messagesQuery = useMemoFirebase(() => {
-    if (!messagesRef) return null;
-    return query(messagesRef, orderBy('createdAt', 'asc'));
-  }, [messagesRef]);
-
-  const { data: messages, isLoading: isMessagesLoading } = useCollection<Message>(messagesQuery);
   
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
@@ -400,13 +378,6 @@ export default function Home() {
     }
   }, [messages, isPending]);
 
-  // Set active chat to the first one on initial load
-  useEffect(() => {
-    if (!activeChatId && chats && chats.length > 0) {
-      setActiveChatId(chats[0].id);
-    }
-  }, [chats, activeChatId]);
-  
   useEffect(() => {
     if (user?.photoURL) {
       setProfilePic(user.photoURL);
@@ -414,22 +385,8 @@ export default function Home() {
   }, [user]);
 
   const handleNewChat = async () => {
-    if (!user || !chatsRef) return;
-    try {
-        const newChat = {
-            title: 'New Chat',
-            createdAt: serverTimestamp(),
-        };
-        const docRef = await addDoc(chatsRef, newChat);
-        setActiveChatId(docRef.id);
-    } catch (error) {
-        console.error("Error creating new chat:", error);
-        toast({
-            variant: 'destructive',
-            title: 'Error',
-            description: 'Could not create a new chat.',
-        });
-    }
+    setActiveChatId('new');
+    setMessages([]);
   };
 
   const handleDeleteChat = async () => {
@@ -453,7 +410,7 @@ export default function Home() {
         });
 
         if (activeChatId === chatToDelete) {
-            setActiveChatId(null);
+            handleNewChat();
         }
         setChatToDelete(null);
 
@@ -522,16 +479,33 @@ const handleProfilePicUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
 
   const handleCommand = async (command: string, ...args: string[]) => {
     const fullCommand = `${command} ${args.join(' ')}`.trim();
-    if (!messagesRef) return;
+    
+    let currentChatId = activeChatId;
+    if (!user) return;
+    
+    // Create new chat if it's the first message
+    if (activeChatId === 'new') {
+        const chatsRef = collection(firestore, 'users', user.uid, 'chats');
+        const newChat = {
+            title: fullCommand.substring(0, 25) + (fullCommand.length > 25 ? '...' : ''),
+            createdAt: serverTimestamp(),
+        };
+        const docRef = await addDoc(chatsRef, newChat);
+        currentChatId = docRef.id;
+        setActiveChatId(docRef.id);
+    }
+    if (!currentChatId || currentChatId === 'new') return;
+    const messagesRef = collection(firestore, 'users', user.uid, 'chats', currentChatId, 'messages');
+    
 
     if (command === '/imagine') {
         const prompt = args.join(' ');
         if (!prompt) {
-            await addDoc(messagesRef, { role: 'error', content: 'The /imagine command requires a text prompt.', createdAt: serverTimestamp() });
+            setMessages(prev => [...prev, { id: Date.now().toString(), role: 'error', content: 'The /imagine command requires a text prompt.', createdAt: new Date().toISOString() }]);
             return;
         }
 
-        await addDoc(messagesRef, { role: 'user', content: fullCommand, createdAt: serverTimestamp() });
+        setMessages(prev => [...prev, { id: Date.now().toString(), role: 'user', content: fullCommand, createdAt: new Date().toISOString() }]);
         setIsPending(true);
 
         const { imageUrl, error } = await getImage(prompt);
@@ -545,10 +519,10 @@ const handleProfilePicUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     } else if (command === '/quiz') {
         const topic = args.join(' ');
         if (!topic) {
-            await addDoc(messagesRef, { role: 'error', content: 'The /quiz command requires a topic.', createdAt: serverTimestamp() });
+            setMessages(prev => [...prev, { id: Date.now().toString(), role: 'error', content: 'The /quiz command requires a topic.', createdAt: new Date().toISOString() }]);
             return;
         }
-        await addDoc(messagesRef, { role: 'user', content: fullCommand, createdAt: serverTimestamp() });
+        setMessages(prev => [...prev, { id: Date.now().toString(), role: 'user', content: fullCommand, createdAt: new Date().toISOString() }]);
         setIsPending(true);
 
         const { quiz, error } = await getQuiz(topic);
@@ -560,7 +534,7 @@ const handleProfilePicUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
         setIsPending(false);
 
     } else {
-        await addDoc(messagesRef, { role: 'error', content: `Unknown command: ${command}`, createdAt: serverTimestamp() });
+        setMessages(prev => [...prev, { id: Date.now().toString(), role: 'error', content: `Unknown command: ${command}`, createdAt: new Date().toISOString() }]);
     }
 };
 
@@ -590,7 +564,7 @@ const handleProfilePicUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
 
 
   const onSubmit = async (data: z.infer<typeof formSchema>) => {
-    if (!user || !activeChatId || !messagesRef) return;
+    if (!user) return;
     
     if (data.question.startsWith('/')) {
         const [command, ...args] = data.question.split(' ');
@@ -602,15 +576,35 @@ const handleProfilePicUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     }
     
     const userMessage: Message = {
-      id: '', // Will be set by Firestore
+      id: Date.now().toString(), // Temp ID
       role: 'user',
       content: data.question,
-      createdAt: serverTimestamp(),
+      createdAt: new Date().toISOString(),
       fileDataUri: fileDataUri
     };
     
-    await addDoc(messagesRef, userMessage);
+    setMessages(prev => [...prev, userMessage]);
     
+    let currentChatId = activeChatId;
+    if (activeChatId === 'new') {
+        const chatsRef = collection(firestore, 'users', user.uid, 'chats');
+        const newChat = {
+            title: data.question.substring(0, 25) + (data.question.length > 25 ? '...' : ''),
+            createdAt: serverTimestamp(),
+        };
+        const docRef = await addDoc(chatsRef, newChat);
+        currentChatId = docRef.id;
+        setActiveChatId(docRef.id);
+        
+        const messagesRef = collection(firestore, 'users', user.uid, 'chats', currentChatId, 'messages');
+        await addDoc(messagesRef, { ...userMessage, createdAt: serverTimestamp() });
+    } else if (currentChatId) {
+        const messagesRef = collection(firestore, 'users', user.uid, 'chats', currentChatId, 'messages');
+        await addDoc(messagesRef, { ...userMessage, createdAt: serverTimestamp() });
+    }
+
+    if (!currentChatId || currentChatId === 'new') return;
+
     setIsPending(true);
     form.reset();
     setFileDataUri(undefined);
@@ -620,6 +614,7 @@ const handleProfilePicUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { answer, error } = await getAnswer(data.question, fileDataUri, abortControllerRef.current.signal);
     abortControllerRef.current = null;
     
+    const messagesRef = collection(firestore, 'users', user.uid, 'chats', currentChatId, 'messages');
     if (error) {
       await addDoc(messagesRef, { role: 'error', content: error, createdAt: serverTimestamp() });
     } else {
@@ -693,33 +688,9 @@ const handleProfilePicUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
             <Button variant="outline" className="w-full" onClick={handleNewChat}>
                 <MessageSquarePlus className="mr-2" /> New Chat
             </Button>
-            <ScrollArea className="flex-1 my-4 -mx-2">
-                <div className="px-2 space-y-1">
-                    {isChatsLoading ? (
-                        [...Array(5)].map((_, i) => <Skeleton key={i} className="h-8 w-full" />)
-                    ) : (
-                        chats?.map(chat => (
-                            <div key={chat.id} className="relative group">
-                                <Button
-                                    variant={activeChatId === chat.id ? 'secondary' : 'ghost'}
-                                    className="w-full justify-start"
-                                    onClick={() => setActiveChatId(chat.id)}
-                                >
-                                    <span className="truncate">{chat.title}</span>
-                                </Button>
-                                <Button 
-                                    variant="ghost" 
-                                    size="icon" 
-                                    className="absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7 opacity-0 group-hover:opacity-100"
-                                    onClick={() => setChatToDelete(chat.id)}
-                                >
-                                    <Trash className="h-4 w-4" />
-                                </Button>
-                            </div>
-                        ))
-                    )}
-                </div>
-            </ScrollArea>
+            <div className="flex-1 my-4">
+                {/* Chat history removed as per user request */}
+            </div>
           </SidebarContent>
           <SidebarFooter>
             <div className="p-2 space-y-2">
@@ -748,132 +719,112 @@ const handleProfilePicUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
         </Sidebar>
 
         <main className="flex-1 flex flex-col h-svh">
-            {activeChatId ? (
-                <>
-                <header className="flex items-center justify-between p-4 border-b">
-                    <SidebarTrigger className="md:hidden"/>
-                    <h1 className="text-lg font-semibold tracking-tight truncate flex-1 text-center">{chats?.find(c => c.id === activeChatId)?.title || 'Chat'}</h1>
-                </header>
-                <div className="flex-1 relative">
-                    <ScrollArea className="h-full" viewportRef={scrollAreaViewportRef}>
-                        <div className="p-4 md:p-6 space-y-6">
-                        {isMessagesLoading ? (
-                            <LoadingMessage />
-                        ) : (
-                            messages?.map((message, index) => {
-                            if (message.role === 'user') {
-                                return <UserMessage key={message.id} content={message.content as string} fileDataUri={message.fileDataUri} createdAt={message.createdAt?.toDate().toISOString()} profilePic={profilePic} />;
-                            }
-                            if (message.role === 'assistant') {
-                                return <AssistantMessage key={message.id} message={message} isLastMessage={index === messages.length - 1} isPending={isPending} />;
-                            }
-                            if (message.role === 'system' && message.programs) {
-                                return <StudentProgramMessage key={message.id} programs={message.programs} />
-                            }
-                            if (message.role === 'error') {
-                                return <ErrorMessage key={message.id} content={message.content as string} />;
-                            }
-                            return null;
-                            })
-                        )}
-                        {isPending && <LoadingMessage />}
-                        </div>
-                    </ScrollArea>
-                    {!messages || messages.length === 0 && !isMessagesLoading && (
-                      <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                          <div className="text-center">
-                              <GraduationCap className="h-12 w-12 mx-auto text-muted-foreground" />
-                              <h2 className="mt-4 text-2xl font-semibold">freechat tutor</h2>
-                              <p className="mt-2 text-muted-foreground">How can I help you today?</p>
-                              <div className="mt-6 grid grid-cols-2 gap-2 text-sm max-w-sm mx-auto">
-                                  {examplePrompts.map(prompt => (
-                                      <Button 
-                                          key={prompt} 
-                                          variant="outline" 
-                                          className="text-left justify-start h-auto"
-                                          onClick={() => form.setValue('question', prompt)}
-                                      >
-                                          {prompt}
-                                      </Button>
-                                  ))}
-                              </div>
-                          </div>
-                      </div>
-                    )}
-                </div>
-
-                <footer className="p-4 border-t">
-                <Form {...form}>
-                    <form onSubmit={form.handleSubmit(onSubmit)} className="relative">
-                        {fileDataUri && (
-                            <div className="absolute bottom-full left-0 mb-2 w-full">
-                                <div className="p-2 bg-muted rounded-md flex items-center justify-between gap-2">
-                                    <div className="flex items-center gap-2 text-sm text-muted-foreground truncate">
-                                        <FileText className="h-4 w-4" />
-                                        <span className="truncate">{fileName}</span>
-                                    </div>
-                                    <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => { setFileDataUri(undefined); setFileName(undefined);}}>
-                                        <X className="h-4 w-4" />
-                                    </Button>
-                                </div>
-                            </div>
-                        )}
-                        <Textarea
-                            {...form.register('question')}
-                            placeholder="Ask anything or type '/' for commands..."
-                            className="pr-28"
-                            rows={1}
-                            onKeyDown={(e) => {
-                                if (e.key === 'Enter' && !e.shiftKey) {
-                                    e.preventDefault();
-                                    form.handleSubmit(onSubmit)();
-                                }
-                            }}
-                            disabled={isPending}
-                        />
-                        <div className="absolute top-1/2 -translate-y-1/2 right-2 flex items-center gap-1">
-                            <Button 
-                                type="button" 
-                                variant="ghost" 
-                                size="icon"
-                                onClick={() => fileInputRef.current?.click()}
-                                disabled={isPending}
-                            >
-                                <Paperclip />
-                            </Button>
-                            <input type="file" ref={fileInputRef} onChange={handleFileUpload} className="hidden" />
-                            <Button type="submit" size="icon" disabled={isPending}>
-                                <Send />
-                            </Button>
-                        </div>
-                    </form>
-                </Form>
-                </footer>
-                </>
-            ) : (
-                <div className="flex-1 flex flex-col items-center justify-center p-4">
-                    {isChatsLoading ? (
-                        <div className="flex items-center gap-2 text-muted-foreground">
-                            <Loader className="h-5 w-5 animate-spin" />
-                            <span>Loading chats...</span>
-                        </div>
+            <header className="flex items-center justify-between p-4 border-b">
+                <SidebarTrigger className="md:hidden"/>
+                <h1 className="text-lg font-semibold tracking-tight truncate flex-1 text-center">
+                    {activeChatId === 'new' ? 'New Chat' : 'Conversation'}
+                </h1>
+            </header>
+            <div className="flex-1 relative">
+                <ScrollArea className="h-full" viewportRef={scrollAreaViewportRef}>
+                    <div className="p-4 md:p-6 space-y-6">
+                    {isMessagesLoading ? (
+                        <LoadingMessage />
                     ) : (
+                        messages?.map((message, index) => {
+                        if (message.role === 'user') {
+                            return <UserMessage key={message.id} content={message.content as string} fileDataUri={message.fileDataUri} createdAt={message.createdAt?.toString()} profilePic={profilePic} />;
+                        }
+                        if (message.role === 'assistant') {
+                            return <AssistantMessage key={message.id} message={message} isLastMessage={index === messages.length - 1} isPending={isPending} />;
+                        }
+                        if (message.role === 'system' && message.programs) {
+                            return <StudentProgramMessage key={message.id} programs={message.programs} />
+                        }
+                        if (message.role === 'error') {
+                            return <ErrorMessage key={message.id} content={message.content as string} />;
+                        }
+                        return null;
+                        })
+                    )}
+                    {isPending && <LoadingMessage />}
+                    </div>
+                </ScrollArea>
+                {!messages || messages.length === 0 && !isMessagesLoading && (
+                    <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
                         <div className="text-center">
-                            <MessageSquarePlus className="h-12 w-12 mx-auto text-muted-foreground" />
-                            <h2 className="mt-4 text-xl font-semibold">No Active Chat</h2>
-                            <p className="mt-2 text-muted-foreground">Create a new chat to get started.</p>
-                            <Button className="mt-4" onClick={handleNewChat}>New Chat</Button>
+                            <GraduationCap className="h-12 w-12 mx-auto text-muted-foreground" />
+                            <h2 className="mt-4 text-2xl font-semibold">freechat tutor</h2>
+                            <p className="mt-2 text-muted-foreground">How can I help you today?</p>
+                            <div className="mt-6 grid grid-cols-2 gap-2 text-sm max-w-sm mx-auto">
+                                {examplePrompts.map(prompt => (
+                                    <Button 
+                                        key={prompt} 
+                                        variant="outline" 
+                                        className="text-left justify-start h-auto"
+                                        onClick={() => form.setValue('question', prompt)}
+                                    >
+                                        {prompt}
+                                    </Button>
+                                ))}
+                            </div>
+                        </div>
+                    </div>
+                )}
+            </div>
+
+            <footer className="p-4 border-t">
+            <Form {...form}>
+                <form onSubmit={form.handleSubmit(onSubmit)} className="relative">
+                    {fileDataUri && (
+                        <div className="absolute bottom-full left-0 mb-2 w-full">
+                            <div className="p-2 bg-muted rounded-md flex items-center justify-between gap-2">
+                                <div className="flex items-center gap-2 text-sm text-muted-foreground truncate">
+                                    <FileText className="h-4 w-4" />
+                                    <span className="truncate">{fileName}</span>
+                                </div>
+                                <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => { setFileDataUri(undefined); setFileName(undefined);}}>
+                                    <X className="h-4 w-4" />
+                                </Button>
+                            </div>
                         </div>
                     )}
-                </div>
-            )}
+                    <Textarea
+                        {...form.register('question')}
+                        placeholder="Ask anything or type '/' for commands..."
+                        className="pr-28"
+                        rows={1}
+                        onKeyDown={(e) => {
+                            if (e.key === 'Enter' && !e.shiftKey) {
+                                e.preventDefault();
+                                form.handleSubmit(onSubmit)();
+                            }
+                        }}
+                        disabled={isPending}
+                    />
+                    <div className="absolute top-1/2 -translate-y-1/2 right-2 flex items-center gap-1">
+                        <Button 
+                            type="button" 
+                            variant="ghost" 
+                            size="icon"
+                            onClick={() => fileInputRef.current?.click()}
+                            disabled={isPending}
+                        >
+                            <Paperclip />
+                        </Button>
+                        <input type="file" ref={fileInputRef} onChange={handleFileUpload} className="hidden" />
+                        <Button type="submit" size="icon" disabled={isPending}>
+                            <Send />
+                        </Button>
+                    </div>
+                </form>
+            </Form>
+            </footer>
         </main>
       </div>
     </SidebarProvider>
     </>
   );
 }
-
-    
 
     
