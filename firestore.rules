@@ -1,159 +1,124 @@
-/**
- * @file Firestore Security Rules
- * @description This ruleset enforces a strict user-ownership model for user profiles and their associated data (chats and messages).
- * Admins are granted read access to activity logs for monitoring purposes.
- *
- * Data Structure:
- * - /users/{userId}: Stores user profile information. Only the user can read/write their own profile.
- * - /admins/{userId}: Stores admin user information.
- * - /activity_logs/{logId}: Stores activity logs. Only admins can read these logs.
- * - /users/{userId}/chats/{chatId}: Stores chat sessions for a user. Only the user can read/write their own chats.
- * - /users/{userId}/chats/{chatId}/messages/{messageId}: Stores messages within a specific chat session. Only the user can read/write messages in their own chats.
- *
- * Key Security Decisions:
- * - User listing is disallowed for privacy.
- * - Activity logs are only readable by admins.
- * - Default security posture for ambiguous relationships is strict owner-only access.
- * - Flexible on data shapes to allow for rapid iteration.
- */
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
     /**
-     * @description Controls access to user profile information.
+     * @description Controls access to user profile documents.
      * @path /users/{userId}
-     * @allow (create) User with ID 'user123' can create their profile if authenticated as 'user123'.
-     * @deny (create) User with ID 'user456' cannot create a profile for 'user123'.
-     * @allow (get) User 'user123' can read their own profile if authenticated as 'user123'.
-     * @deny (get) User 'user456' cannot read 'user123's profile.
-     * @principle Enforces document ownership for writes and reads.
+     * @allow (create) - User with UID 'user123' can create their profile document at /users/user123.
+     * @allow (get, update, delete) - User with UID 'user123' can read, update, and delete their profile document at /users/user123.
+     * @deny (create) - User with UID 'user456' cannot create a profile document at /users/user123.
+     * @deny (get, update, delete) - User with UID 'user456' cannot read, update, or delete the profile document at /users/user123.
+     * @principle Enforces document ownership for all operations.
      */
     match /users/{userId} {
-      // Verified user can create their own profile.
-      allow create: if isSignedIn() && isOwner(userId) && request.resource.data.email is string && request.resource.data.displayName is string && request.resource.data.createdAt is string;
-      // Only the user can read their own profile.
+      function isSignedIn() {
+        return request.auth != null;
+      }
+
+      function isOwner(userId) {
+        return request.auth.uid == userId;
+      }
+
       allow get: if isSignedIn() && isOwner(userId);
-      // Only the user can update their own profile. Email cannot be changed.
-      allow update: if isSignedIn() && isExistingOwner(userId) && request.resource.data.email == resource.data.email;
-      // Only the user can delete their own profile.
-      allow delete: if isSignedIn() && isExistingOwner(userId);
-      // No listing of users.
       allow list: if false;
+      allow create: if isSignedIn() && isOwner(userId);
+      allow update: if isSignedIn() && isOwner(userId);
+      allow delete: if isSignedIn() && isOwner(userId);
     }
 
     /**
-     * @description Controls access to admin user information.
+     * @description Controls access to admin user documents.
      * @path /admins/{userId}
-     * @allow (create) Only the backend can create admin records.
-     * @deny (create) Users cannot create admin records.
-     * @allow (get) Only admins can read admin records.
-     * @deny (get) Regular users cannot read admin records.
-     * @principle Restricts access to admin-level configuration.
+     * @allow (get) - Admin user with UID 'admin123' can read their admin document at /admins/admin123.
+     * @deny (create, update, delete) - No one can create, update, or delete admin documents via client.
+     * @deny (get) - Non-admin user with UID 'user123' cannot read the admin document at /admins/admin123.
+     * @principle Restricts access to admin documents to only authenticated admins.
      */
     match /admins/{userId} {
-      // Only the backend can create admin records
-      allow create: if false;
-      // Only admins can read admin records
-      allow get: if false; // TODO: Implement admin role check
-      // Only admins can update admin records
-      allow update: if false; // TODO: Implement admin role check
-      // Only admins can delete admin records
-      allow delete: if false; // TODO: Implement admin role check
-      // No listing of admins.
+      function isSignedIn() {
+        return request.auth != null;
+      }
+
+      // Placeholder for admin check.  In a real application, this would likely involve
+      // querying a database or using custom claims.
+      function isAdmin() {
+        return false;
+      }
+
+      allow get: if isSignedIn() && isAdmin();
       allow list: if false;
+      allow create: if false;
+      allow update: if false;
+      allow delete: if false;
     }
 
     /**
-     * @description Controls access to activity logs for admin monitoring.
+     * @description Controls access to activity log documents.
      * @path /activity_logs/{logId}
-     * @allow (create) Only the backend can create activity logs.
-     * @deny (create) Regular users cannot create activity logs.
-     * @allow (get) Only admins can read activity logs.
-     * @deny (get) Regular users cannot read activity logs.
-     * @principle Restricts activity log access to authorized admins.
+     * @allow (get, list) - Admins can read activity logs for monitoring.
+     * @deny (create, update, delete) - Regular users cannot create, update, or delete activity logs.
+     * @principle Limits access to activity logs for security and data integrity.
      */
     match /activity_logs/{logId} {
-      // Only the backend can create activity logs.
-      allow create: if false; // TODO: Implement backend check
-      // Only admins can read activity logs.
-      allow get: if false; // TODO: Implement admin role check
-      // Only admins can update activity logs.
-      allow update: if false; // TODO: Implement admin role check
-      // Only admins can delete activity logs.
-      allow delete: if false; // TODO: Implement admin role check
-      // Only admins can list activity logs.
-      allow list: if false; // TODO: Implement admin role check
+      function isSignedIn() {
+        return request.auth != null;
+      }
+
+      // Placeholder for admin check.  In a real application, this would likely involve
+      // querying a database or using custom claims.
+      function isAdmin() {
+        return false;
+      }
+
+      allow get, list: if isSignedIn() && isAdmin();
+      allow create: if false;
+      allow update: if false;
+      allow delete: if false;
     }
 
     /**
-     * @description Controls access to chat sessions for a specific user.
+     * @description Controls access to chat session documents for a user.
      * @path /users/{userId}/chats/{chatId}
-     * @allow (create) User with ID 'user123' can create a chat if authenticated as 'user123'.
-     * @deny (create) User with ID 'user456' cannot create a chat for 'user123'.
-     * @allow (get) User 'user123' can read their own chats if authenticated as 'user123'.
-     * @deny (get) User 'user456' cannot read 'user123's chats.
-     * @principle Restricts access to a user's own data tree.
+     * @allow (create, get, update, delete) - User 'user123' can manage their own chats.
+     * @deny (create, get, update, delete) - User 'user456' cannot access chats of 'user123'.
      */
     match /users/{userId}/chats/{chatId} {
-      // Verified user can create a chat in their own user document.
-      allow create: if isSignedIn() && isOwner(userId) && request.resource.data.title is string && request.resource.data.createdAt is string;
-      // Only the owner can read their own chat.
+      function isSignedIn() {
+        return request.auth != null;
+      }
+
+      function isOwner(userId) {
+        return request.auth.uid == userId;
+      }
+
       allow get: if isSignedIn() && isOwner(userId);
-      // Only the owner can update their own chat.
-      allow update: if isSignedIn() && isExistingOwner(userId);
-      // Only the owner can delete their own chat.
-      allow delete: if isSignedIn() && isExistingOwner(userId);
-      // Only the owner can list their own chats.
-      allow list: if isSignedIn() && isOwner(userId);
+      allow list: if false;
+      allow create: if isSignedIn() && isOwner(userId);
+      allow update: if isSignedIn() && isOwner(userId);
+      allow delete: if isSignedIn() && isOwner(userId);
     }
 
     /**
-     * @description Controls access to messages within a specific chat session.
+     * @description Controls access to message documents within a chat session.
      * @path /users/{userId}/chats/{chatId}/messages/{messageId}
-     * @allow (create) User with ID 'user123' can create a message in their chat if authenticated as 'user123'.
-     * @deny (create) User with ID 'user456' cannot create a message for 'user123'.
-     * @allow (get) User 'user123' can read messages in their chat if authenticated as 'user123'.
-     * @deny (get) User 'user456' cannot read 'user123's messages.
-     * @principle Restricts access to a user's own data tree.
+     * @allow (create, get, update, delete) - User 'user123' can manage messages within their own chats.
+     * @deny (create, get, update, delete) - User 'user456' cannot access messages in chats of 'user123'.
      */
     match /users/{userId}/chats/{chatId}/messages/{messageId} {
-      // Verified user can create a message in their own chat.
-      allow create: if isSignedIn() && isOwner(userId) && request.resource.data.id is string && request.resource.data.role is string && request.resource.data.content is string && request.resource.data.createdAt is string;
-      // Only the owner can read messages in their own chat.
+      function isSignedIn() {
+        return request.auth != null;
+      }
+
+      function isOwner(userId) {
+        return request.auth.uid == userId;
+      }
+
       allow get: if isSignedIn() && isOwner(userId);
-      // Only the owner can update messages in their own chat.
-      allow update: if isSignedIn() && isExistingOwner(userId);
-      // Only the owner can delete messages in their own chat.
-      allow delete: if isSignedIn() && isExistingOwner(userId);
-      // Only the owner can list messages in their own chat.
-      allow list: if isSignedIn() && isOwner(userId);
+      allow list: if false;
+      allow create: if isSignedIn() && isOwner(userId);
+      allow update: if isSignedIn() && isOwner(userId);
+      allow delete: if isSignedIn() && isOwner(userId);
     }
   }
-}
-
-/**
- * @description Checks if the user is signed in.
- * @returns {boolean} True if the user is signed in, false otherwise.
- */
-function isSignedIn() {
-  return request.auth != null;
-}
-
-/**
- * @description Checks if the user is the owner of the document.
- * @param {string} userId The user ID to check against.
- * @returns {boolean} True if the user is the owner, false otherwise.
- */
-function isOwner(userId) {
-  return request.auth.uid == userId;
-}
-
-/**
- * @description Checks if the user is the owner of the document and the document exists.
- * @param {string} userId The user ID to check against.
- * @returns {boolean} True if the user is the owner and the document exists, false otherwise.
- */
-function isExistingOwner(userId) {
-  return isSignedIn() && isOwner(userId) && resource != null;
 }
