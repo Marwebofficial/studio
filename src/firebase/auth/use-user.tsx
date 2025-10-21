@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo } from 'react';
-import { useFirebase } from '@/firebase/provider';
+import { useFirebase, useMemoFirebase } from '@/firebase/provider';
 import { useDoc } from '@/firebase/firestore/use-doc';
 import { doc, Firestore } from 'firebase/firestore';
 
@@ -15,7 +15,7 @@ export interface UserHookResult {
 export const useUser = (): UserHookResult => {
   const { user, isUserLoading: isAuthLoading, userError, firestore } = useFirebase();
   
-  const adminDocRef = useMemo(() => {
+  const adminDocRef = useMemoFirebase(() => {
     if (!user || !firestore) return null;
     return doc(firestore as Firestore, 'admins', user.uid);
   }, [user, firestore]);
