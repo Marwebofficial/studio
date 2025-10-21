@@ -69,7 +69,7 @@ import {
 import { Skeleton } from '@/components/ui/skeleton';
 import { useTypingEffect } from '@/hooks/use-typing-effect';
 import { QuizView, type QuizData } from '@/components/quiz';
-import { useAuth, useUser, useFirestore, useCollection, useMemoFirebase } from '@/firebase';
+import { useAuth, useUser, useFirestore, useCollection, useMemoFirebase, useDoc } from '@/firebase';
 import { signOut } from 'firebase/auth';
 import type { Message, Chat } from '@/lib/types';
 import { cn } from '@/lib/utils';
@@ -318,6 +318,12 @@ export default function Home() {
   const firestore = useFirestore();
   const { user, isAdmin, isUserLoading } = useUser();
 
+  const userDocRef = useMemoFirebase(() => {
+    if (!user) return null;
+    return doc(firestore, 'users', user.uid);
+  }, [user, firestore]);
+  const { data: userData } = useDoc(userDocRef);
+
   const [activeChatId, setActiveChatId] = useState<string | null>('new');
   const [messages, setMessages] = useState<Message[]>([]);
   const [isMessagesLoading, setIsMessagesLoading] = useState(false);
@@ -379,10 +385,12 @@ export default function Home() {
   }, [messages, isPending]);
 
   useEffect(() => {
-    if (user?.photoURL) {
+    if (userData?.photoURL) {
+      setProfilePic(userData.photoURL);
+    } else if (user?.photoURL) {
       setProfilePic(user.photoURL);
     }
-  }, [user]);
+  }, [user, userData]);
 
 
   const chatsQuery = useMemoFirebase(() => {
@@ -422,7 +430,13 @@ export default function Home() {
     setActiveChatId(chatId);
   }
 
-  const handleDeleteChat = async () => {
+  const handleDeleteChat = async (chatId: string) => {
+    if (!user) return;
+  
+    setChatToDelete(chatId);
+  };
+  
+  const confirmDeleteChat = async () => {
     if (!user || !chatToDelete) return;
 
     try {
@@ -445,8 +459,6 @@ export default function Home() {
         if (activeChatId === chatToDelete) {
             handleNewChat();
         }
-        setChatToDelete(null);
-
     } catch (error) {
         console.error("Error deleting chat:", error);
         toast({
@@ -454,6 +466,7 @@ export default function Home() {
             title: 'Error',
             description: 'Could not delete the chat.',
         });
+    } finally {
         setChatToDelete(null);
     }
   };
@@ -486,12 +499,20 @@ export default function Home() {
 const handleProfilePicUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
+        if (file.size > 2 * 1024 * 1024) { // 2MB limit
+            toast({
+                variant: 'destructive',
+                title: 'Image too large',
+                description: 'Please upload an image smaller than 2MB.',
+            });
+            return;
+        }
         const reader = new FileReader();
         reader.onload = (loadEvent) => {
             const newProfilePic = loadEvent.target?.result as string;
             setProfilePic(newProfilePic);
             if (user) {
-                updateProfile(user, { photoURL: newProfilePic });
+                // We only update firestore, as firebase auth has a length limit for photoURL
                 updateDoc(doc(firestore, 'users', user.uid), { photoURL: newProfilePic });
             }
         };
@@ -714,7 +735,7 @@ const handleProfilePicUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
             </AlertDialogHeader>
             <AlertDialogFooter>
                 <AlertDialogCancel onClick={() => setChatToDelete(null)}>Cancel</AlertDialogCancel>
-                <AlertDialogAction onClick={handleDeleteChat}>Delete</AlertDialogAction>
+                <AlertDialogAction onClick={confirmDeleteChat}>Delete</AlertDialogAction>
             </AlertDialogFooter>
         </AlertDialogContent>
     </AlertDialog>
@@ -734,20 +755,36 @@ const handleProfilePicUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
             <Button variant="ghost" className="w-full border justify-start" onClick={handleNewChat}>
                 <MessageSquarePlus className="mr-2" /> New Chat
             </Button>
-            <div className="flex-1 my-4">
-              {activeChatId !== 'new' && chats && (
-                <div className="px-2 space-y-1">
-                  <h3 className="px-2 text-xs font-semibold text-muted-foreground tracking-wider">CURRENT CHAT</h3>
-                  <Button
-                      variant="ghost"
-                      className={cn("w-full justify-start truncate bg-accent/20")}
-                      onClick={() => handleSelectChat(activeChatId)}
-                  >
-                      {activeChatTitle}
-                  </Button>
-                </div>
-              )}
-            </div>
+            <ScrollArea className="flex-1 my-4">
+              <div className="px-2 space-y-1">
+                <h3 className="px-2 text-xs font-semibold text-muted-foreground tracking-wider">CHAT HISTORY</h3>
+                {isChatsLoading ? (
+                  <div className="space-y-2">
+                    {[...Array(3)].map((_, i) => <Skeleton key={i} className="h-9 w-full" />)}
+                  </div>
+                ) : (
+                  chats?.map((chat) => (
+                    <div key={chat.id} className="group relative">
+                      <Button
+                          variant="ghost"
+                          className={cn("w-full justify-start truncate", activeChatId === chat.id && "bg-accent/20")}
+                          onClick={() => handleSelectChat(chat.id)}
+                      >
+                          {chat.title}
+                      </Button>
+                      <Button 
+                        variant="ghost" 
+                        size="icon" 
+                        className="absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7 opacity-0 group-hover:opacity-100"
+                        onClick={() => handleDeleteChat(chat.id)}
+                      >
+                        <Trash className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  ))
+                )}
+              </div>
+            </ScrollArea>
           </SidebarContent>
           <SidebarFooter>
             <div className="p-2 space-y-2">
