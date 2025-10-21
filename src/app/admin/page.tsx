@@ -94,8 +94,10 @@ const AdminDashboard = () => {
     }, [activityLogs]);
 
     const handleLogout = async () => {
-        await signOut(auth);
-        window.location.href = '/';
+        if (auth) {
+            await signOut(auth);
+            window.location.href = '/';
+        }
     };
     
   return (
@@ -307,5 +309,8 @@ export default function AdminPage() {
     )
   }
 
+  // Only render the full dashboard if the user is a verified admin
   return <AdminDashboard />;
 }
+
+    
