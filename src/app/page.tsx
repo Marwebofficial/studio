@@ -12,7 +12,8 @@ import Link from 'next/link';
 import { format } from 'date-fns';
 import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
-import { collection, query, where, orderBy, getDocs, addDoc, serverTimestamp, writeBatch, doc } from 'firebase/firestore';
+import { collection, query, where, orderBy, getDocs, addDoc, serverTimestamp, writeBatch, doc, updateDoc } from 'firebase/firestore';
+import { updateProfile } from 'firebase/auth';
 
 
 import { getAnswer, speak, getImage, getQuiz } from '@/app/actions';
@@ -63,6 +64,7 @@ import {
   SidebarHeader,
   SidebarContent,
   SidebarTrigger,
+  SidebarFooter,
 } from '@/components/ui/sidebar';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useTypingEffect } from '@/hooks/use-typing-effect';
@@ -79,6 +81,10 @@ const formSchema = z.object({
 const settingsFormSchema = z.object({
     title: z.string().min(1, 'Please enter a title.'),
     content: z.string().optional(),
+});
+
+const updateProfileFormSchema = z.object({
+    displayName: z.string().min(2, { message: "Name must be at least 2 characters."}),
 });
 
 
@@ -327,6 +333,7 @@ export default function Home() {
   const [programToDelete, setProgramToDelete] = useState<string | null>(null);
   const [studentPrograms, setStudentPrograms] = useState<any[]>([]);
   const [profilePic, setProfilePic] = useState<string | null>(null);
+  const [isUpdateProfileOpen, setIsUpdateProfileOpen] = useState(false);
   const abortControllerRef = useRef<AbortController | null>(null);
 
   // Firestore-backed chats state
@@ -354,46 +361,6 @@ export default function Home() {
 
   const { data: messages, isLoading: isMessagesLoading } = useCollection<Message>(messagesQuery);
   
-  const activeChat = chats?.find((chat) => chat.id === activeChatId);
-
-  useEffect(() => {
-    // Load student programs and profile pic from localStorage
-    const savedPrograms = localStorage.getItem('studentPrograms');
-    const loadedPrograms = savedPrograms ? JSON.parse(savedPrograms, (key, value) => {
-        if (key === 'createdAt') return new Date(value);
-        return value;
-    }) : [];
-    setStudentPrograms(loadedPrograms);
-    
-    const savedProfilePic = localStorage.getItem('profilePic');
-    if (savedProfilePic) {
-        setProfilePic(savedProfilePic);
-    }
-  }, []);
-
-  useEffect(() => {
-    if (!isUserLoading && !user) {
-      setActiveChatId(null);
-      setProfilePic(null);
-      localStorage.removeItem('profilePic');
-    }
-  }, [user, isUserLoading]);
-
-
-  useEffect(() => {
-    localStorage.setItem('studentPrograms', JSON.stringify(studentPrograms));
-  }, [studentPrograms]);
-  
-  const handleNewChat = async () => {
-    if (!user || !chatsRef) return null;
-    const newChatRef = await addDoc(chatsRef!, {
-        createdAt: serverTimestamp(),
-        title: 'New Chat',
-    });
-    setActiveChatId(newChatRef.id);
-    return newChatRef.id;
-  };
-
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
     defaultValues: {
@@ -403,23 +370,106 @@ export default function Home() {
 
   const settingsForm = useForm<z.infer<typeof settingsFormSchema>>({
     resolver: zodResolver(settingsFormSchema),
-    defaultValues: {
-        title: '',
-        content: '',
-    },
+    defaultValues: { title: '', content: '' },
   });
 
-  const handlePrompt = async (prompt: string) => {
-    setActiveChatId(null); // Set to null to show new chat screen
-    form.setValue('question', prompt);
-    // Use a timeout to ensure state updates before submitting
-    setTimeout(() => {
-        form.handleSubmit((data) => onSubmit(data))();
-    }, 0);
+  const updateProfileForm = useForm<z.infer<typeof updateProfileFormSchema>>({
+    resolver: zodResolver(updateProfileFormSchema),
+    defaultValues: { displayName: '' },
+  });
+
+  useEffect(() => {
+    if (user && user.displayName) {
+        updateProfileForm.setValue('displayName', user.displayName);
+    }
+  }, [user, updateProfileForm]);
+
+  useEffect(() => {
+    if (user && !user.displayName && !isUserLoading && !isUpdateProfileOpen) {
+        setIsUpdateProfileOpen(true);
+    }
+  }, [user, isUserLoading, isUpdateProfileOpen]);
+
+  // Scroll to bottom of chat on new message
+  useEffect(() => {
+    if (scrollAreaViewportRef.current) {
+      scrollAreaViewportRef.current.scrollTo({
+        top: scrollAreaViewportRef.current.scrollHeight,
+        behavior: 'smooth',
+      });
+    }
+  }, [messages, isPending]);
+
+  // Set active chat to the first one on initial load
+  useEffect(() => {
+    if (!activeChatId && chats && chats.length > 0) {
+      setActiveChatId(chats[0].id);
+    }
+  }, [chats, activeChatId]);
+  
+  useEffect(() => {
+    if (user?.photoURL) {
+      setProfilePic(user.photoURL);
+    }
+  }, [user]);
+
+  const handleNewChat = async () => {
+    if (!user || !chatsRef) return;
+    try {
+        const newChat = {
+            title: 'New Chat',
+            createdAt: serverTimestamp(),
+        };
+        const docRef = await addDoc(chatsRef, newChat);
+        setActiveChatId(docRef.id);
+    } catch (error) {
+        console.error("Error creating new chat:", error);
+        toast({
+            variant: 'destructive',
+            title: 'Error',
+            description: 'Could not create a new chat.',
+        });
+    }
   };
 
-  const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>, isSettings: boolean = false) => {
-    const file = event.target.files?.[0];
+  const handleDeleteChat = async () => {
+    if (!user || !chatToDelete) return;
+
+    try {
+        const chatDocRef = doc(firestore, 'users', user.uid, 'chats', chatToDelete);
+        const messagesRef = collection(chatDocRef, 'messages');
+        const messagesSnapshot = await getDocs(messagesRef);
+        
+        const batch = writeBatch(firestore);
+        messagesSnapshot.forEach(doc => {
+            batch.delete(doc.ref);
+        });
+        batch.delete(chatDocRef);
+        await batch.commit();
+
+        toast({
+            title: 'Chat Deleted',
+            description: 'The chat and all its messages have been removed.',
+        });
+
+        if (activeChatId === chatToDelete) {
+            setActiveChatId(null);
+        }
+        setChatToDelete(null);
+
+    } catch (error) {
+        console.error("Error deleting chat:", error);
+        toast({
+            variant: 'destructive',
+            title: 'Error',
+            description: 'Could not delete the chat.',
+        });
+        setChatToDelete(null);
+    }
+  };
+  
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
     if (file) {
       const reader = new FileReader();
       reader.onload = (loadEvent) => {
@@ -428,703 +478,402 @@ export default function Home() {
       };
       reader.readAsDataURL(file);
     }
+    // Reset file input
+    if (e.target) e.target.value = '';
   };
-
-  const handleProfilePicChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
+  
+  const handleSettingsFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
     if (file) {
-      const reader = new FileReader();
-      reader.onload = (loadEvent) => {
-        const newProfilePic = loadEvent.target?.result as string;
-        setProfilePic(newProfilePic);
-        localStorage.setItem('profilePic', newProfilePic);
-        toast({
-            title: 'Profile Picture Updated',
-            description: 'Your new profile picture has been saved.',
-        });
-      };
-      reader.readAsDataURL(file);
+        const reader = new FileReader();
+        reader.onload = (loadEvent) => {
+            settingsForm.setValue('content', loadEvent.target?.result as string);
+        };
+        reader.readAsDataURL(file);
+    }
+    if (e.target) e.target.value = '';
+};
+
+const handleProfilePicUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+        const reader = new FileReader();
+        reader.onload = (loadEvent) => {
+            const newProfilePic = loadEvent.target?.result as string;
+            setProfilePic(newProfilePic);
+            // Non-blocking updates
+            if (user) {
+                updateProfile(user, { photoURL: newProfilePic });
+                updateDoc(doc(firestore, 'users', user.uid), { photoURL: newProfilePic });
+            }
+        };
+        reader.readAsDataURL(file);
+    }
+    if (e.target) e.target.value = '';
+};
+  
+  const handleLogout = async () => {
+    if (auth) {
+      await signOut(auth);
+      toast({ title: 'Logged Out', description: 'You have been successfully logged out.' });
+      window.location.href = '/login';
     }
   };
 
-  const removeFile = (isSettings: boolean = false) => {
-    setFileDataUri(undefined);
-    setFileName(undefined);
-    const inputRef = isSettings ? settingsFileInputRef : fileInputRef;
-    if (inputRef.current) {
-        inputRef.current.value = '';
-    }
-  }
+  const handleCommand = async (command: string, ...args: string[]) => {
+    const fullCommand = `${command} ${args.join(' ')}`.trim();
+    if (!messagesRef) return;
 
-  const handleSaveSettings = async (data: z.infer<typeof settingsFormSchema>) => {
-    if (!data.content && !fileDataUri) {
-        settingsForm.setError('content', {
-            type: 'manual',
-            message: 'Please either provide content or upload a file.',
-        });
-        return;
-    }
+    if (command === '/imagine') {
+        const prompt = args.join(' ');
+        if (!prompt) {
+            await addDoc(messagesRef, { role: 'error', content: 'The /imagine command requires a text prompt.', createdAt: serverTimestamp() });
+            return;
+        }
 
-    if (programToEdit) {
-        // Editing existing program
-        const updatedProgram = {
-            ...programToEdit,
-            title: data.title,
-            content: data.content,
-            fileDataUri: fileDataUri,
-            fileName: fileName,
-        };
-        setStudentPrograms(prev => prev.map(p => p.id === programToEdit.id ? updatedProgram : p));
-        toast({
-            title: 'Settings Updated',
-            description: `The program "${data.title}" has been updated.`,
-        });
+        await addDoc(messagesRef, { role: 'user', content: fullCommand, createdAt: serverTimestamp() });
+        setIsPending(true);
+
+        const { imageUrl, error } = await getImage(prompt);
+        if (error) {
+            await addDoc(messagesRef, { role: 'error', content: error, createdAt: serverTimestamp() });
+        } else if (imageUrl) {
+            await addDoc(messagesRef, { role: 'assistant', content: `An image generated for: "${prompt}"`, imageUrl: imageUrl, createdAt: serverTimestamp() });
+        }
+        setIsPending(false);
+
+    } else if (command === '/quiz') {
+        const topic = args.join(' ');
+        if (!topic) {
+            await addDoc(messagesRef, { role: 'error', content: 'The /quiz command requires a topic.', createdAt: serverTimestamp() });
+            return;
+        }
+        await addDoc(messagesRef, { role: 'user', content: fullCommand, createdAt: serverTimestamp() });
+        setIsPending(true);
+
+        const { quiz, error } = await getQuiz(topic);
+        if (error) {
+            await addDoc(messagesRef, { role: 'error', content: error, createdAt: serverTimestamp() });
+        } else if (quiz) {
+            await addDoc(messagesRef, { role: 'assistant', content: '', quiz: quiz, createdAt: serverTimestamp() });
+        }
+        setIsPending(false);
 
     } else {
-        // Adding new program
-        const newProgram = {
-            id: crypto.randomUUID(),
-            title: data.title,
-            content: data.content,
-            fileDataUri: fileDataUri,
-            fileName: fileName,
-            createdAt: new Date(),
-        };
+        await addDoc(messagesRef, { role: 'error', content: `Unknown command: ${command}`, createdAt: serverTimestamp() });
+    }
+};
 
-        setStudentPrograms(prev => [newProgram, ...prev]);
+  const onUpdateProfileSubmit = async (values: z.infer<typeof updateProfileFormSchema>) => {
+    if (!user) return;
+    try {
+        const userDocRef = doc(firestore, 'users', user.uid);
+        // Non-blocking update to auth and firestore
+        updateProfile(user, { displayName: values.displayName });
+        updateDoc(userDocRef, { displayName: values.displayName });
+
         toast({
-            title: 'Settings Saved',
-            description: `The program "${data.title}" has been saved.`,
+            title: 'Profile Updated',
+            description: `Your name has been set to ${values.displayName}.`,
+        });
+        setIsUpdateProfileOpen(false);
+        updateProfileForm.reset();
+    } catch (error) {
+        console.error("Error updating profile:", error);
+        toast({
+            variant: 'destructive',
+            title: 'Error',
+            description: 'Could not update your profile.',
         });
     }
-    
-    // Reset and close
-    settingsForm.reset();
-    removeFile(true);
-    setIsSettingsOpen(false);
-    setProgramToEdit(null);
-  };
-
-  const handleEditProgram = (program: any) => {
-    setProgramToEdit(program);
-    settingsForm.setValue('title', program.title);
-    settingsForm.setValue('content', program.content || '');
-    if (program.fileDataUri) {
-        setFileDataUri(program.fileDataUri);
-        setFileName(program.fileName);
-    }
-    setIsEditProgramOpen(false);
-    setIsSettingsOpen(true);
-  };
-
-  const handleDeleteProgram = (programId: string) => {
-    setStudentPrograms(prev => prev.filter(p => p.id !== programId));
-    toast({
-        title: 'Program Deleted',
-        description: 'The program entry has been deleted.',
-    });
-  };
-
-  const addMessage = async (chatId: string, message: Omit<Message, 'id' | 'createdAt'>) => {
-    if (!user) return null;
-    const messagesCollectionRef = collection(firestore, 'users', user.uid, 'chats', chatId, 'messages');
-    const messageData: { [key: string]: any } = { ...message, createdAt: serverTimestamp() };
-    if (messageData.fileDataUri === undefined) {
-      delete messageData.fileDataUri;
-    }
-    return await addDoc(messagesCollectionRef, messageData);
   };
 
 
   const onSubmit = async (data: z.infer<typeof formSchema>) => {
-    const question = data.question;
-    if (!question || !user) return;
-
-    let currentChatId = activeChatId;
-
-    if (!currentChatId) {
-        const newChatId = await handleNewChat();
-        if (!newChatId) return; // Stop if chat creation failed
-        currentChatId = newChatId;
-    }
+    if (!user || !activeChatId || !messagesRef) return;
     
-    if (question.trim().toLowerCase() === 'studentprogramsetting') {
-        setProgramToEdit(null);
-        settingsForm.reset();
-        removeFile(true);
-        setIsSettingsOpen(true);
+    if (data.question.startsWith('/')) {
+        const [command, ...args] = data.question.split(' ');
+        handleCommand(command, ...args);
         form.reset();
-        return;
-    }
-
-    if (question.trim().toLowerCase() === 'editstudentprogram') {
-        setIsEditProgramOpen(true);
-        form.reset();
-        return;
-    }
-
-    if (question.trim().toLowerCase() === 'studentprogram') {
-        await addMessage(currentChatId, {
-            role: 'system',
-            content: 'Displaying student programs.',
-            programs: studentPrograms,
-        });
-        form.reset();
+        setFileDataUri(undefined);
+        setFileName(undefined);
         return;
     }
     
-    const currentFileDataUri = fileDataUri;
+    const userMessage: Message = {
+      id: '', // Will be set by Firestore
+      role: 'user',
+      content: data.question,
+      createdAt: serverTimestamp(),
+      fileDataUri: fileDataUri
+    };
     
+    await addDoc(messagesRef, userMessage);
+    
+    setIsPending(true);
     form.reset();
     setFileDataUri(undefined);
     setFileName(undefined);
-    if (fileInputRef.current) {
-        fileInputRef.current.value = '';
-    }
 
-    await addMessage(currentChatId, { role: 'user', content: question, fileDataUri: currentFileDataUri });
-    
-    setIsPending(true);
     abortControllerRef.current = new AbortController();
-    const signal = abortControllerRef.current.signal;
-
-    try {
-        if (question.startsWith('/imagine')) {
-            const prompt = question.replace('/imagine', '').trim();
-            if (!prompt) throw new Error('Please provide a prompt for the image generation.');
-            
-            const { imageUrl, error } = await getImage(prompt);
-            if (error) throw new Error(error);
-            if (!imageUrl) throw new Error('Image generation failed to return an image.');
-            
-            await addMessage(currentChatId, { 
-                role: 'assistant', 
-                content: `> ${prompt}`,
-                imageUrl: imageUrl, 
-            });
-            
-        } else if (question.startsWith('/quiz')) {
-            const topic = question.replace('/quiz', '').trim();
-            if (!topic) throw new Error('Please provide a topic for the quiz.');
-
-            const { quiz, error } = await getQuiz(topic);
-            if (error) throw new Error(error);
-            if (!quiz) throw new Error('Quiz generation failed to return a quiz.');
-
-            await addMessage(currentChatId, {
-                role: 'assistant', 
-                content: `Quiz on: ${topic}`, 
-                quiz: quiz,
-            });
-
-        } else {
-            const { answer, error } = await getAnswer(question, currentFileDataUri, signal);
-            if (error) throw new Error(error);
-      
-            await addMessage(currentChatId, { role: 'assistant', content: answer });
-        }
-
-    } catch (error) {
-      if (error instanceof Error && error.name === 'AbortError') {
-        console.log('Request was aborted.');
-      } else {
-        const errorMessageContent = error instanceof Error ? error.message : 'An unknown error occurred.';
-        await addMessage(currentChatId, { role: 'error', content: errorMessageContent });
-
-        toast({
-          variant: 'destructive',
-          title: 'Error',
-          description: errorMessageContent,
-        });
-      }
-    } finally {
-        setIsPending(false);
-        abortControllerRef.current = null;
+    const { answer, error } = await getAnswer(data.question, fileDataUri, abortControllerRef.current.signal);
+    abortControllerRef.current = null;
+    
+    if (error) {
+      await addDoc(messagesRef, { role: 'error', content: error, createdAt: serverTimestamp() });
+    } else {
+      await addDoc(messagesRef, { role: 'assistant', content: answer, createdAt: serverTimestamp() });
     }
+    
+    setIsPending(false);
   };
-
-  const handleStop = () => {
-    if (abortControllerRef.current) {
-      abortControllerRef.current.abort();
-    }
-  };
-
-  const getChatTitle = (chat: Chat) => {
-    if (!chat.title || chat.title === 'New Chat') {
-      const firstUserMessage = messages?.find(m => m.role === 'user');
-      const content = firstUserMessage?.content as string | undefined;
-
-      if (content) {
-        if (content.startsWith('/quiz')) return `Quiz: ${content.substring(5).trim()}`;
-        if (content.startsWith('/imagine')) return `Image: ${content.substring(8).trim()}`;
-        return content.substring(0, 40);
-      }
-    }
-    return chat.title || 'New Chat';
-  }
   
-  const handleDeleteChat = async (chatIdToDelete: string) => {
-    if (!user) return;
-    const batch = writeBatch(firestore);
-
-    // Delete all messages in the chat
-    const messagesToDeleteQuery = query(collection(firestore, 'users', user.uid, 'chats', chatIdToDelete, 'messages'));
-    const messagesSnapshot = await getDocs(messagesToDeleteQuery);
-    messagesSnapshot.forEach(doc => {
-      batch.delete(doc.ref);
-    });
-    
-    // Delete the chat itself
-    const chatToDeleteRef = doc(firestore, 'users', user.uid, 'chats', chatIdToDelete);
-    batch.delete(chatToDeleteRef);
-    
-    await batch.commit();
-
-    if (activeChatId === chatIdToDelete) {
-        setActiveChatId(null);
-    }
-  };
-
-  const handleLogout = async () => {
-    try {
-        await signOut(auth);
-        toast({
-            title: 'Logged Out',
-            description: 'You have been successfully logged out.',
-        });
-        setActiveChatId(null);
-    } catch (error) {
-        console.error("Error signing out:", error);
-        toast({
-            variant: 'destructive',
-            title: 'Logout Failed',
-            description: 'An error occurred while logging out. Please try again.',
-        });
-    }
-};
-
-  useEffect(() => {
-    if (scrollAreaViewportRef.current) {
-      scrollAreaViewportRef.current.scrollTo({
-        top: scrollAreaViewportRef.current.scrollHeight,
-        behavior: 'smooth',
-      });
-    }
-  }, [messages, activeChatId, isPending]);
-  
-  const isImageFile = fileDataUri?.startsWith('data:image');
-
-  const renderSidebarContent = () => {
-    if (isUserLoading || (user && isChatsLoading)) {
-      return (
-        <div className="flex flex-col gap-1 pr-2">
-          {[...Array(3)].map((_, i) => (
-            <Skeleton key={i} className="h-8 w-full" />
-          ))}
-        </div>
-      );
-    }
-    
-    if (!user) {
-        return (
-             <div className="text-center text-sm text-muted-foreground p-4">
-                <Link href="/login" className="underline font-semibold">Log in</Link> to see your chat history.
-            </div>
-        )
-    }
-
-    if (!chats || chats.length === 0) {
-        return (
-            <div className="text-center text-sm text-muted-foreground p-4">
-                No chats yet. Start a new conversation!
-            </div>
-        )
-    }
-
-    return (
-      <div className="flex flex-col gap-1 pr-2">
-        {chats.map((chat, index) => (
-          <div key={`${chat.id}-${index}`} className="group relative">
-            <Button
-              variant={activeChatId === chat.id ? 'secondary' : 'ghost'}
-              className="w-full justify-start h-8 text-sm truncate pr-8"
-              onClick={() => setActiveChatId(chat.id)}
-            >
-              {getChatTitle(chat)}
-            </Button>
-            <div className="absolute right-0 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity">
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-7 w-7"
-                onClick={() => setChatToDelete(chat.id)}
-              >
-                <Trash className="h-4 w-4" />
-              </Button>
-            </div>
-          </div>
-        ))}
-      </div>
-    );
-  };
-
-
   return (
-    <SidebarProvider>
-        <div className="flex h-svh w-full bg-background">
-            <Sidebar collapsible="icon" className="border-r-0 md:bg-card/50 backdrop-blur-sm md:border-r">
-                <SidebarHeader>
-                  <Button variant="ghost" className="w-full justify-start h-10" onClick={() => { setActiveChatId(null); }} disabled={!user}>
-                    <MessageSquarePlus className="mr-2" />
-                    New Chat
-                  </Button>
-                </SidebarHeader>
-                <SidebarContent className="p-2">
-                    <ScrollArea className="h-full">
-                        {renderSidebarContent()}
-                    </ScrollArea>
-                </SidebarContent>
-            </Sidebar>
-
-            <div className="flex flex-1 flex-col h-svh bg-background/95 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-primary/20 via-accent/20 to-background bg-[length:200%_200%] animate-background-pan">
-                <header className="flex items-center justify-between gap-3 border-b bg-card/50 backdrop-blur-sm p-4 h-16">
-                    <div className="flex items-center gap-3">
-                        <SidebarTrigger className="md:hidden"/>
-                        <h1 className="text-lg font-semibold tracking-tight">
-                            freechat tutor
-                        </h1>
-                    </div>
-                    <div className="flex items-center gap-3">
-                        {isUserLoading ? (
-                            <Skeleton className="h-8 w-24" />
-                        ) : user ? (
-                            <>
-                                {isAdmin && (
-                                    <Button asChild variant="ghost" size="sm">
-                                        <Link href="/admin"><Shield className="mr-2 h-4 w-4" />Admin</Link>
-                                    </Button>
-                                )}
-                                <button type="button" className="flex items-center gap-3" onClick={() => profilePicInputRef.current?.click()}>
-                                    <Avatar className="h-8 w-8">
-                                        <AvatarImage src={profilePic ?? undefined} alt="User profile picture" />
-                                        <AvatarFallback>
-                                            <User />
-                                        </AvatarFallback>
-                                    </Avatar>
-                                    <span className="text-sm text-muted-foreground hidden md:inline">{user.displayName || user.email}</span>
-                                </button>
-                                <input type="file" accept="image/*" ref={profilePicInputRef} onChange={handleProfilePicChange} className="hidden" />
-
-                                <Button variant="ghost" size="icon" onClick={handleLogout}>
-                                    <LogOut className="h-4 w-4" />
-                                </Button>
-                            </>
-                        ) : (
-                            <>
-                                <Button asChild variant="ghost" size="sm">
-                                    <Link href="/login">Log In</Link>
-                                </Button>
-                                <Button asChild size="sm">
-                                    <Link href="/signup">Sign Up</Link>
-                                </Button>
-                            </>
+    <>
+    <Dialog open={isUpdateProfileOpen} onOpenChange={setIsUpdateProfileOpen}>
+        <DialogContent>
+            <DialogHeader>
+                <DialogTitle>Update Your Profile</DialogTitle>
+                <DialogDescription>
+                    It looks like you haven't set your name yet. Please enter it below.
+                </DialogDescription>
+            </DialogHeader>
+            <Form {...updateProfileForm}>
+                <form onSubmit={updateProfileForm.handleSubmit(onUpdateProfileSubmit)} className="space-y-4">
+                    <FormField
+                        control={updateProfileForm.control}
+                        name="displayName"
+                        render={({ field }) => (
+                            <FormItem>
+                                <FormLabel>Name</FormLabel>
+                                <FormControl>
+                                    <Input placeholder="John Doe" {...field} />
+                                </FormControl>
+                                <FormMessage />
+                            </FormItem>
                         )}
-                    </div>
-                </header>
-                
-                <main className="flex-1 overflow-hidden">
-                    <ScrollArea className="h-full" viewportRef={scrollAreaViewportRef}>
-                        <div className="mx-auto max-w-3xl px-4 md:px-6">
-                        {(!activeChatId) ? (
-                            <div className="flex flex-col items-center justify-center h-full min-h-[calc(100vh-14rem)]">
-                                <Card className="w-full max-w-2xl text-center shadow-none border-0 bg-transparent">
-                                    <CardHeader className="gap-2">
-                                        <div className="flex justify-center">
-                                            <Avatar className="h-16 w-16 border-2 border-accent/20 bg-transparent">
-                                                <AvatarFallback className="bg-transparent">
-                                                    <GraduationCap className="h-8 w-8 text-accent" />
-                                                </AvatarFallback>
-                                            </Avatar>
-                                        </div>
-                                        <CardTitle className="text-3xl font-bold">freechat tutor</CardTitle>
-                                        <CardDescription>Your personal AI tutor for any question.</CardDescription>
-                                    </CardHeader>
-                                    <CardContent>
-                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                                            {examplePrompts.map((prompt) => (
-                                                <Button 
-                                                    key={prompt}
-                                                    variant="outline"
-                                                    className="text-left justify-start h-auto py-3 px-4 font-normal bg-card/50 hover:bg-card"
-                                                    onClick={() => handlePrompt(prompt)}
-                                                    disabled={!user}
-                                                >
-                                                    {prompt}
-                                                </Button>
-                                            ))}
-                                        </div>
-                                         {!user && !isUserLoading && (
-                                            <p className="mt-4 text-sm text-muted-foreground">
-                                                <Link href="/login" className="underline font-semibold">Log in</Link> to start chatting.
-                                            </p>
-                                        )}
-                                    </CardContent>
-                                </Card>
-                            </div>
-                        ) : (
-                        <div className="space-y-6 pt-6 pb-12">
-                            {isMessagesLoading && activeChatId && [...Array(3)].map((_, i) => <LoadingMessage key={i} />)}
-                            {messages && messages.map((message, index) => {
-                                const isLastMessage = index === messages.length - 1;
-                                if (message.role === 'user') {
-                                    const createdAt = message.createdAt?.toDate ? message.createdAt.toDate().toISOString() : new Date().toISOString();
-                                    return <UserMessage key={message.id} content={message.content as string} fileDataUri={message.fileDataUri} createdAt={createdAt} profilePic={profilePic} />;
-                                }
-
-                                if (message.role === 'assistant') {
-                                    return <AssistantMessage key={message.id} message={message} isLastMessage={isLastMessage} isPending={isPending} />;
-                                }
-                                if (message.role === 'error') {
-                                    return <ErrorMessage key={message.id} content={message.content as string} />;
-                                }
-                                if (message.role === 'system' && message.programs) {
-                                    return <StudentProgramMessage key={message.id} programs={message.programs} />;
-                                }
-                                return null;
-                            })}
-                            {isPending && <LoadingMessage />}
-                        </div>
-                        )}
-                        </div>
-                    </ScrollArea>
-                </main>
-
-                <footer className="bg-card/50 backdrop-blur-sm border-t p-4">
-                    <div className="mx-auto max-w-3xl">
-                    {isPending ? (
-                      <div className="flex justify-center">
-                        <Button variant="outline" onClick={handleStop}>
-                            <Square className="mr-2 h-4 w-4" />
-                            Stop Generating
+                    />
+                    <DialogFooter>
+                        <Button type="submit" disabled={updateProfileForm.formState.isSubmitting}>
+                            {updateProfileForm.formState.isSubmitting ? 'Saving...' : 'Save'}
                         </Button>
-                      </div>
-                    ) : (
-                      <Form {...form}>
-                          <form
-                          onSubmit={form.handleSubmit(onSubmit)}
-                          className="relative"
-                          >
-                            <div className="relative">
-                              <FormControl>
-                                  <Input
-                                      placeholder="Ask me anything, or type /imagine or /quiz..."
-                                      autoComplete="off"
-                                      disabled={isPending || !user}
-                                      {...form.register('question')}
-                                      className="pr-20 pl-12 h-12 bg-input rounded-full"
-                                  />
-                              </FormControl>
-                              <Button type="button" size="icon" variant="ghost" className="absolute top-1/2 left-2 -translate-y-1/2 h-9 w-9 rounded-full" onClick={() => fileInputRef.current?.click()} disabled={!user}>
-                                  <Paperclip className="h-4 w-4" />
-                                  <span className="sr-only">Attach file</span>
-                              </Button>
-                              <Button type="submit" size="icon" disabled={isPending || !user} className="absolute top-1/2 right-2 -translate-y-1/2 h-9 w-9 rounded-full bg-accent hover:bg-accent/90">
-                                  <Send className="h-4 w-4" />
-                                  <span className="sr-only">Send</span>
-                              </Button>
-                            </div>
-                            {fileDataUri && !isSettingsOpen && (
-                              <div className="mt-4 relative w-24 h-24">
-                                  {isImageFile ? (
-                                      <Image src={fileDataUri} alt="Preview" fill objectFit="cover" className="rounded-lg" />
-                                  ) : (
-                                      <div className="w-full h-full bg-muted rounded-lg flex items-center justify-center">
-                                          <FileText className="w-10 h-10 text-muted-foreground" />
-                                      </div>
-                                  )}
-                                  <Button type="button" size="icon" variant="destructive" className="absolute -top-2 -right-2 h-6 w-6 rounded-full" onClick={() => removeFile()}>
-                                      <X className="h-4 w-4" />
-                                  </Button>
-                              </div>
-                            )}
-
-                            <input type="file" accept="image/*,text/plain,.md" ref={fileInputRef} onChange={(e) => handleFileChange(e)} className="hidden" />
-                            
-                            <FormField
-                              control={form.control}
-                              name="question"
-                              render={() => (
-                              <FormItem>
-                                  <FormMessage className="mt-2" />
-                              </FormItem>
-                              )}
-                          />
-                          </form>
-                      </Form>
-                    )}
-                    <p className="text-xs text-center text-muted-foreground mt-3">
-                        Press <kbd className="pointer-events-none inline-flex h-5 select-none items-center gap-1 rounded border bg-muted px-1.5 font-mono text-[10px] font-medium text-muted-foreground opacity-100"><span className="text-xs">⌘</span>B</kbd> to toggle the sidebar.
-                    </p>
-                    </div>
-                </footer>
+                    </DialogFooter>
+                </form>
+            </Form>
+        </DialogContent>
+    </Dialog>
+    <AlertDialog open={!!chatToDelete} onOpenChange={(open) => !open && setChatToDelete(null)}>
+        <AlertDialogContent>
+            <AlertDialogHeader>
+                <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+                <AlertDialogDescription>
+                    This will permanently delete the chat and all of its messages. This action cannot be undone.
+                </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+                <AlertDialogCancel onClick={() => setChatToDelete(null)}>Cancel</AlertDialogCancel>
+                <AlertDialogAction onClick={handleDeleteChat}>Delete</AlertDialogAction>
+            </AlertDialogFooter>
+        </AlertDialogContent>
+    </AlertDialog>
+    <SidebarProvider>
+      <div className="flex h-svh bg-background text-foreground">
+        <Sidebar className="border-r border-border/20">
+          <SidebarHeader>
+            <div className="flex items-center gap-2 p-2">
+                <Link href="/" className="inline-block p-1 rounded-full bg-accent/10 border border-accent/20">
+                    <GraduationCap className="h-5 w-5 text-accent" />
+                </Link>
+              <h2 className="text-lg font-semibold tracking-tight">freechat tutor</h2>
             </div>
-        </div>
-        <AlertDialog open={!!chatToDelete} onOpenChange={(open) => !open && setChatToDelete(null)}>
-            <AlertDialogContent>
-                <AlertDialogHeader>
-                    <AlertDialogTitle>Are you sure?</AlertDialogTitle>
-                    <AlertDialogDescription>
-                        This action cannot be undone. This will permanently delete this chat history.
-                    </AlertDialogDescription>
-                </AlertDialogHeader>
-                <AlertDialogFooter>
-                    <AlertDialogCancel onClick={() => setChatToDelete(null)}>Cancel</AlertDialogCancel>
-                    <AlertDialogAction
-                        onClick={() => {
-                            if (chatToDelete) {
-                                handleDeleteChat(chatToDelete);
-                            }
-                            setChatToDelete(null);
-                        }}
-                    >
-                        Delete
-                    </AlertDialogAction>
-                </AlertDialogFooter>
-            </AlertDialogContent>
-        </AlertDialog>
-        <Dialog open={isSettingsOpen} onOpenChange={(open) => {
-            if (!open) {
-                setProgramToEdit(null);
-                settingsForm.reset();
-                removeFile(true);
-            }
-            setIsSettingsOpen(open);
-        }}>
-            <DialogContent className="sm:max-w-[425px]">
-                <Form {...settingsForm}>
-                    <form onSubmit={settingsForm.handleSubmit(handleSaveSettings)}>
-                        <DialogHeader>
-                            <DialogTitle>{programToEdit ? 'Edit' : 'Student Program'} Settings</DialogTitle>
-                            <DialogDescription>
-                                {programToEdit ? 'Edit the' : 'Add a new'} program setting. Provide a title and either type content or upload a file.
-                            </DialogDescription>
-                        </DialogHeader>
-                        <div className="grid gap-4 py-4">
-                            <FormField
-                                control={settingsForm.control}
-                                name="title"
-                                render={({ field }) => (
-                                    <FormItem>
-                                        <FormLabel>Title</FormLabel>
-                                        <FormControl>
-                                            <Input placeholder="e.g., Week 1 Reading" {...field} />
-                                        </FormControl>
-                                        <FormMessage />
-                                    </FormItem>
-                                )}
-                            />
-                            <FormField
-                                control={settingsForm.control}
-                                name="content"
-                                render={({ field }) => (
-                                    <FormItem>
-                                        <FormLabel>Content</FormLabel>
-                                        <FormControl>
-                                            <Textarea placeholder="Type your content here..." className="resize-none" {...field} />
-                                        </FormControl>
-                                        <FormMessage />
-                                    </FormItem>
-                                )}
-                            />
-                             <div className="space-y-2">
-                                <Label>Or Upload a File</Label>
-                                {fileDataUri ? (
-                                    <div className="relative w-24 h-24">
-                                        {isImageFile ? (
-                                            <Image src={fileDataUri} alt="Preview" fill objectFit="cover" className="rounded-lg" />
-                                        ) : (
-                                            <div className="w-full h-full bg-muted rounded-lg flex items-center justify-center">
-                                                <FileText className="w-10 h-10 text-muted-foreground" />
-                                            </div>
-                                        )}
-                                        <Button type="button" size="icon" variant="destructive" className="absolute -top-2 -right-2 h-6 w-6 rounded-full" onClick={() => removeFile(true)}>
-                                            <X className="h-4 w-4" />
-                                        </Button>
-                                    </div>
-                                ) : (
-                                    <Button type="button" variant="outline" onClick={() => settingsFileInputRef.current?.click()}>
-                                        <Paperclip className="mr-2 h-4 w-4" />
-                                        Attach File
-                                    </Button>
-                                )}
-                                <input type="file" accept="image/*,text/plain,.md,.pdf,.doc,.docx" ref={settingsFileInputRef} onChange={(e) => handleFileChange(e, true)} className="hidden" />
+            <SidebarTrigger className="absolute top-3 right-3" />
+          </SidebarHeader>
+          <SidebarContent className="p-2 flex flex-col">
+            <Button variant="outline" className="w-full" onClick={handleNewChat}>
+                <MessageSquarePlus className="mr-2" /> New Chat
+            </Button>
+            <ScrollArea className="flex-1 my-4 -mx-2">
+                <div className="px-2 space-y-1">
+                    {isChatsLoading ? (
+                        [...Array(5)].map((_, i) => <Skeleton key={i} className="h-8 w-full" />)
+                    ) : (
+                        chats?.map(chat => (
+                            <div key={chat.id} className="relative group">
+                                <Button
+                                    variant={activeChatId === chat.id ? 'secondary' : 'ghost'}
+                                    className="w-full justify-start"
+                                    onClick={() => setActiveChatId(chat.id)}
+                                >
+                                    <span className="truncate">{chat.title}</span>
+                                </Button>
+                                <Button 
+                                    variant="ghost" 
+                                    size="icon" 
+                                    className="absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7 opacity-0 group-hover:opacity-100"
+                                    onClick={() => setChatToDelete(chat.id)}
+                                >
+                                    <Trash className="h-4 w-4" />
+                                </Button>
                             </div>
+                        ))
+                    )}
+                </div>
+            </ScrollArea>
+          </SidebarContent>
+          <SidebarFooter>
+            <div className="p-2 space-y-2">
+                {user && (
+                    <div className="flex items-center gap-3">
+                        <Avatar className="h-9 w-9 cursor-pointer" onClick={() => profilePicInputRef.current?.click()}>
+                           <AvatarImage src={profilePic ?? undefined} alt="Profile picture" />
+                            <AvatarFallback>
+                                {user.displayName ? user.displayName.substring(0, 2).toUpperCase() : <User />}
+                            </AvatarFallback>
+                        </Avatar>
+                        <input type="file" accept="image/*" ref={profilePicInputRef} onChange={handleProfilePicUpload} className="hidden" />
+                        <div className="flex-1 overflow-hidden">
+                            <p className="font-semibold truncate">{user.displayName || 'Anonymous User'}</p>
+                            <p className="text-xs text-muted-foreground truncate">{user.email}</p>
                         </div>
-                        <DialogFooter>
-                            <DialogClose asChild>
-                                <Button type="button" variant="secondary">Cancel</Button>
-                            </DialogClose>
-                            <Button type="submit">Save</Button>
-                        </DialogFooter>
+                        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setIsUpdateProfileOpen(true)}><Edit /></Button>
+                    </div>
+                )}
+                <div className="flex items-center gap-2">
+                    {isAdmin && <Button variant="outline" className="flex-1" asChild><Link href="/admin"><Shield /> Admin</Link></Button>}
+                    <Button variant="destructive" className="flex-1" onClick={handleLogout}><LogOut /> Logout</Button>
+                </div>
+            </div>
+          </SidebarFooter>
+        </Sidebar>
+
+        <main className="flex-1 flex flex-col h-svh">
+            {activeChatId ? (
+                <>
+                <header className="flex items-center justify-between p-4 border-b">
+                    <SidebarTrigger className="md:hidden"/>
+                    <h1 className="text-lg font-semibold tracking-tight truncate flex-1 text-center">{chats?.find(c => c.id === activeChatId)?.title || 'Chat'}</h1>
+                </header>
+                <div className="flex-1 relative">
+                    <ScrollArea className="h-full" viewportRef={scrollAreaViewportRef}>
+                        <div className="p-4 md:p-6 space-y-6">
+                        {isMessagesLoading ? (
+                            <LoadingMessage />
+                        ) : (
+                            messages?.map((message, index) => {
+                            if (message.role === 'user') {
+                                return <UserMessage key={message.id} content={message.content as string} fileDataUri={message.fileDataUri} createdAt={message.createdAt?.toDate().toISOString()} profilePic={profilePic} />;
+                            }
+                            if (message.role === 'assistant') {
+                                return <AssistantMessage key={message.id} message={message} isLastMessage={index === messages.length - 1} isPending={isPending} />;
+                            }
+                            if (message.role === 'system' && message.programs) {
+                                return <StudentProgramMessage key={message.id} programs={message.programs} />
+                            }
+                            if (message.role === 'error') {
+                                return <ErrorMessage key={message.id} content={message.content as string} />;
+                            }
+                            return null;
+                            })
+                        )}
+                        {isPending && <LoadingMessage />}
+                        </div>
+                    </ScrollArea>
+                    {!messages || messages.length === 0 && !isMessagesLoading && (
+                      <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                          <div className="text-center">
+                              <GraduationCap className="h-12 w-12 mx-auto text-muted-foreground" />
+                              <h2 className="mt-4 text-2xl font-semibold">freechat tutor</h2>
+                              <p className="mt-2 text-muted-foreground">How can I help you today?</p>
+                              <div className="mt-6 grid grid-cols-2 gap-2 text-sm max-w-sm mx-auto">
+                                  {examplePrompts.map(prompt => (
+                                      <Button 
+                                          key={prompt} 
+                                          variant="outline" 
+                                          className="text-left justify-start h-auto"
+                                          onClick={() => form.setValue('question', prompt)}
+                                      >
+                                          {prompt}
+                                      </Button>
+                                  ))}
+                              </div>
+                          </div>
+                      </div>
+                    )}
+                </div>
+
+                <footer className="p-4 border-t">
+                <Form {...form}>
+                    <form onSubmit={form.handleSubmit(onSubmit)} className="relative">
+                        {fileDataUri && (
+                            <div className="absolute bottom-full left-0 mb-2 w-full">
+                                <div className="p-2 bg-muted rounded-md flex items-center justify-between gap-2">
+                                    <div className="flex items-center gap-2 text-sm text-muted-foreground truncate">
+                                        <FileText className="h-4 w-4" />
+                                        <span className="truncate">{fileName}</span>
+                                    </div>
+                                    <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => { setFileDataUri(undefined); setFileName(undefined);}}>
+                                        <X className="h-4 w-4" />
+                                    </Button>
+                                </div>
+                            </div>
+                        )}
+                        <Textarea
+                            {...form.register('question')}
+                            placeholder="Ask anything or type '/' for commands..."
+                            className="pr-28"
+                            rows={1}
+                            onKeyDown={(e) => {
+                                if (e.key === 'Enter' && !e.shiftKey) {
+                                    e.preventDefault();
+                                    form.handleSubmit(onSubmit)();
+                                }
+                            }}
+                            disabled={isPending}
+                        />
+                        <div className="absolute top-1/2 -translate-y-1/2 right-2 flex items-center gap-1">
+                            <Button 
+                                type="button" 
+                                variant="ghost" 
+                                size="icon"
+                                onClick={() => fileInputRef.current?.click()}
+                                disabled={isPending}
+                            >
+                                <Paperclip />
+                            </Button>
+                            <input type="file" ref={fileInputRef} onChange={handleFileUpload} className="hidden" />
+                            <Button type="submit" size="icon" disabled={isPending}>
+                                <Send />
+                            </Button>
+                        </div>
                     </form>
                 </Form>
-            </DialogContent>
-        </Dialog>
-        <Dialog open={isEditProgramOpen} onOpenChange={setIsEditProgramOpen}>
-            <DialogContent className="sm:max-w-lg">
-                <DialogHeader>
-                    <DialogTitle>Edit Student Program</DialogTitle>
-                    <DialogDescription>
-                        Select a program entry to edit or delete it.
-                    </DialogDescription>
-                </DialogHeader>
-                <ScrollArea className="max-h-[60vh]">
-                    <div className="space-y-4 pr-6">
-                        {studentPrograms.length > 0 ? studentPrograms.map(program => (
-                             <Card key={program.id} className="flex items-center justify-between p-4">
-                                <div>
-                                    <p className="font-semibold">{program.title}</p>
-                                    <p className="text-sm text-muted-foreground">{program.content?.substring(0, 30) || program.fileName}{'...'}</p>
-                                </div>
-                                <div className="flex gap-2">
-                                    <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => handleEditProgram(program)}>
-                                        <Edit className="h-4 w-4" />
-                                    </Button>
-                                    <Button variant="destructive" size="icon" className="h-8 w-8" onClick={() => setProgramToDelete(program.id)}>
-                                        <Trash className="h-4 w-4" />
-                                    </Button>
-                                </div>
-                            </Card>
-                        )) : (
-                            <p className="text-center text-muted-foreground py-8">No program entries found.</p>
-                        )}
-                    </div>
-                </ScrollArea>
-            </DialogContent>
-        </Dialog>
-         <AlertDialog open={!!programToDelete} onOpenChange={(open) => !open && setProgramToDelete(null)}>
-            <AlertDialogContent>
-                <AlertDialogHeader>
-                    <AlertDialogTitle>Are you sure?</AlertDialogTitle>
-                    <AlertDialogDescription>
-                        This action cannot be undone. This will permanently delete this program entry.
-                    </AlertDialogDescription>
-                </AlertDialogHeader>
-                <AlertDialogFooter>
-                    <AlertDialogCancel onClick={() => setProgramToDelete(null)}>Cancel</AlertDialogCancel>
-                    <AlertDialogAction
-                        onClick={() => {
-                            if (programToDelete) {
-                                handleDeleteProgram(programToDelete);
-                            }
-                            setProgramToDelete(null);
-                        }}
-                    >
-                        Delete
-                    </AlertDialogAction>
-                </AlertDialogFooter>
-            </AlertDialogContent>
-        </AlertDialog>
+                </footer>
+                </>
+            ) : (
+                <div className="flex-1 flex flex-col items-center justify-center p-4">
+                    {isChatsLoading ? (
+                        <div className="flex items-center gap-2 text-muted-foreground">
+                            <Loader className="h-5 w-5 animate-spin" />
+                            <span>Loading chats...</span>
+                        </div>
+                    ) : (
+                        <div className="text-center">
+                            <MessageSquarePlus className="h-12 w-12 mx-auto text-muted-foreground" />
+                            <h2 className="mt-4 text-xl font-semibold">No Active Chat</h2>
+                            <p className="mt-2 text-muted-foreground">Create a new chat to get started.</p>
+                            <Button className="mt-4" onClick={handleNewChat}>New Chat</Button>
+                        </div>
+                    )}
+                </div>
+            )}
+        </main>
+      </div>
     </SidebarProvider>
+    </>
   );
 }
+
+    
+
+    
