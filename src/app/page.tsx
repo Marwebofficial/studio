@@ -72,6 +72,7 @@ import { QuizView, type QuizData } from '@/components/quiz';
 import { useAuth, useUser, useFirestore, useCollection, useMemoFirebase } from '@/firebase';
 import { signOut } from 'firebase/auth';
 import type { Message, Chat } from '@/lib/types';
+import { cn } from '@/lib/utils';
 
 
 const formSchema = z.object({
@@ -92,8 +93,8 @@ const UserMessage = ({ content, fileDataUri, createdAt, profilePic }: { content:
     const isImage = fileDataUri?.startsWith('data:image');
     return (
         <div className="flex items-start gap-3 justify-end">
-          <div className="max-w-xl w-full space-y-2">
-            <div className="bg-primary/10 border border-primary/20 text-foreground p-3 rounded-xl rounded-br-none">
+          <div className="max-w-2xl w-full space-y-2">
+            <div className="bg-primary/10 border border-primary/20 text-foreground p-3 rounded-xl rounded-br-none backdrop-blur-sm">
               {fileDataUri && isImage && (
                 <Image 
                   src={fileDataUri} 
@@ -188,8 +189,8 @@ const AssistantMessage = ({ message, isLastMessage, isPending }: { message: Mess
               <Bot className="h-4 w-4 text-accent" />
             </AvatarFallback>
           </Avatar>
-          <div className="max-w-xl w-full space-y-2">
-              <div className="bg-accent/10 p-3 rounded-xl rounded-bl-none border border-accent/20 group relative">
+          <div className="max-w-2xl w-full space-y-2">
+              <div className="bg-accent/10 p-3 rounded-xl rounded-bl-none border border-accent/20 group relative backdrop-blur-sm">
                   {message.imageUrl && <Image src={message.imageUrl} alt={typeof content === 'string' ? content : 'Generated image'} width={512} height={512} className="rounded-lg mb-2" />}
                   <div className="prose prose-sm prose-invert max-w-none text-foreground pb-6">
                       {renderContent}
@@ -200,7 +201,6 @@ const AssistantMessage = ({ message, isLastMessage, isPending }: { message: Mess
                           size="icon" 
                           variant="ghost"
                           className="h-7 w-7"
-                          // onClick={() => setTypingStopped(true)} // This functionality is removed for simplicity now.
                       >
                           <Square className="h-4 w-4" />
                       </Button>
@@ -277,7 +277,7 @@ const ErrorMessage = ({ content }: { content: string }) => (
             <Bot className="h-4 w-4" />
         </AvatarFallback>
       </Avatar>
-      <div className="flex-1 space-y2">
+      <div className="flex-1 space-y-2">
         <p className="font-semibold text-destructive">Error</p>
         <div className="prose prose-sm max-w-none text-destructive">
             <p>{content}</p>
@@ -293,12 +293,12 @@ const LoadingMessage = () => (
           <Bot className="h-4 w-4 text-accent" />
         </AvatarFallback>
       </Avatar>
-      <div className="max-w-xl w-full space-y-4">
-        <div className="bg-accent/10 p-3 rounded-xl rounded-bl-none border border-accent/20">
+      <div className="max-w-2xl w-full space-y-4">
+        <div className="bg-accent/10 p-3 rounded-xl rounded-bl-none border border-accent/20 backdrop-blur-sm">
             <div className="space-y-2">
-                <Skeleton className="h-4 w-5/6" />
-                <Skeleton className="h-4 w-full" />
-                <Skeleton className="h-4 w-4/6" />
+                <Skeleton className="h-4 w-5/6 bg-muted/50" />
+                <Skeleton className="h-4 w-full bg-muted/50" />
+                <Skeleton className="h-4 w-4/6 bg-muted/50" />
             </div>
         </div>
       </div>
@@ -384,10 +384,43 @@ export default function Home() {
     }
   }, [user]);
 
+
+  const chatsQuery = useMemoFirebase(() => {
+    if (!user) return null;
+    return query(
+      collection(firestore, 'users', user.uid, 'chats'),
+      orderBy('createdAt', 'desc')
+    );
+  }, [user, firestore]);
+  const { data: chats, isLoading: isChatsLoading } = useCollection<Chat>(chatsQuery);
+
+  const messagesQuery = useMemoFirebase(() => {
+    if (!user || !activeChatId || activeChatId === 'new') return null;
+    return query(
+        collection(firestore, 'users', user.uid, 'chats', activeChatId, 'messages'),
+        orderBy('createdAt', 'asc')
+    );
+  }, [user, activeChatId, firestore]);
+  const { data: fetchedMessages, isLoading: isFetchedMessagesLoading } = useCollection<Message>(messagesQuery);
+
+  useEffect(() => {
+      if (fetchedMessages) {
+          setMessages(fetchedMessages);
+      } else if (activeChatId === 'new') {
+          setMessages([]);
+      }
+      setIsMessagesLoading(isFetchedMessagesLoading);
+  }, [fetchedMessages, isFetchedMessagesLoading, activeChatId]);
+
+
   const handleNewChat = async () => {
     setActiveChatId('new');
     setMessages([]);
   };
+
+  const handleSelectChat = (chatId: string) => {
+    setActiveChatId(chatId);
+  }
 
   const handleDeleteChat = async () => {
     if (!user || !chatToDelete) return;
@@ -435,7 +468,6 @@ export default function Home() {
       };
       reader.readAsDataURL(file);
     }
-    // Reset file input
     if (e.target) e.target.value = '';
   };
   
@@ -458,7 +490,6 @@ const handleProfilePicUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
         reader.onload = (loadEvent) => {
             const newProfilePic = loadEvent.target?.result as string;
             setProfilePic(newProfilePic);
-            // Non-blocking updates
             if (user) {
                 updateProfile(user, { photoURL: newProfilePic });
                 updateDoc(doc(firestore, 'users', user.uid), { photoURL: newProfilePic });
@@ -483,7 +514,8 @@ const handleProfilePicUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     let currentChatId = activeChatId;
     if (!user) return;
     
-    // Create new chat if it's the first message
+    setMessages(prev => [...prev, { id: Date.now().toString(), role: 'user', content: fullCommand, createdAt: new Date().toISOString() }]);
+
     if (activeChatId === 'new') {
         const chatsRef = collection(firestore, 'users', user.uid, 'chats');
         const newChat = {
@@ -494,55 +526,47 @@ const handleProfilePicUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
         currentChatId = docRef.id;
         setActiveChatId(docRef.id);
     }
+
     if (!currentChatId || currentChatId === 'new') return;
     const messagesRef = collection(firestore, 'users', user.uid, 'chats', currentChatId, 'messages');
+    await addDoc(messagesRef, { role: 'user', content: fullCommand, createdAt: serverTimestamp() });
     
+    setIsPending(true);
 
     if (command === '/imagine') {
         const prompt = args.join(' ');
         if (!prompt) {
-            setMessages(prev => [...prev, { id: Date.now().toString(), role: 'error', content: 'The /imagine command requires a text prompt.', createdAt: new Date().toISOString() }]);
-            return;
+            await addDoc(messagesRef, { role: 'error', content: 'The /imagine command requires a text prompt.', createdAt: serverTimestamp() });
+        } else {
+            const { imageUrl, error } = await getImage(prompt);
+            if (error) {
+                await addDoc(messagesRef, { role: 'error', content: error, createdAt: serverTimestamp() });
+            } else if (imageUrl) {
+                await addDoc(messagesRef, { role: 'assistant', content: `An image generated for: "${prompt}"`, imageUrl: imageUrl, createdAt: serverTimestamp() });
+            }
         }
-
-        setMessages(prev => [...prev, { id: Date.now().toString(), role: 'user', content: fullCommand, createdAt: new Date().toISOString() }]);
-        setIsPending(true);
-
-        const { imageUrl, error } = await getImage(prompt);
-        if (error) {
-            await addDoc(messagesRef, { role: 'error', content: error, createdAt: serverTimestamp() });
-        } else if (imageUrl) {
-            await addDoc(messagesRef, { role: 'assistant', content: `An image generated for: "${prompt}"`, imageUrl: imageUrl, createdAt: serverTimestamp() });
-        }
-        setIsPending(false);
-
     } else if (command === '/quiz') {
         const topic = args.join(' ');
         if (!topic) {
-            setMessages(prev => [...prev, { id: Date.now().toString(), role: 'error', content: 'The /quiz command requires a topic.', createdAt: new Date().toISOString() }]);
-            return;
+            await addDoc(messagesRef, { role: 'error', content: 'The /quiz command requires a topic.', createdAt: serverTimestamp() });
+        } else {
+            const { quiz, error } = await getQuiz(topic);
+            if (error) {
+                await addDoc(messagesRef, { role: 'error', content: error, createdAt: serverTimestamp() });
+            } else if (quiz) {
+                await addDoc(messagesRef, { role: 'assistant', content: '', quiz: quiz, createdAt: serverTimestamp() });
+            }
         }
-        setMessages(prev => [...prev, { id: Date.now().toString(), role: 'user', content: fullCommand, createdAt: new Date().toISOString() }]);
-        setIsPending(true);
-
-        const { quiz, error } = await getQuiz(topic);
-        if (error) {
-            await addDoc(messagesRef, { role: 'error', content: error, createdAt: serverTimestamp() });
-        } else if (quiz) {
-            await addDoc(messagesRef, { role: 'assistant', content: '', quiz: quiz, createdAt: serverTimestamp() });
-        }
-        setIsPending(false);
-
     } else {
-        setMessages(prev => [...prev, { id: Date.now().toString(), role: 'error', content: `Unknown command: ${command}`, createdAt: new Date().toISOString() }]);
+        await addDoc(messagesRef, { role: 'error', content: `Unknown command: ${command}`, createdAt: serverTimestamp() });
     }
+    setIsPending(false);
 };
 
   const onUpdateProfileSubmit = async (values: z.infer<typeof updateProfileFormSchema>) => {
     if (!user) return;
     try {
         const userDocRef = doc(firestore, 'users', user.uid);
-        // Non-blocking update to auth and firestore
         updateProfile(user, { displayName: values.displayName });
         updateDoc(userDocRef, { displayName: values.displayName });
 
@@ -576,16 +600,22 @@ const handleProfilePicUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     }
     
     const userMessage: Message = {
-      id: Date.now().toString(), // Temp ID
+      id: Date.now().toString(),
       role: 'user',
       content: data.question,
       createdAt: new Date().toISOString(),
       fileDataUri: fileDataUri
     };
     
-    setMessages(prev => [...prev, userMessage]);
-    
     let currentChatId = activeChatId;
+    
+    // Optimistically update UI
+    setMessages(prev => [...prev, userMessage]);
+    form.reset();
+    setFileDataUri(undefined);
+    setFileName(undefined);
+
+
     if (activeChatId === 'new') {
         const chatsRef = collection(firestore, 'users', user.uid, 'chats');
         const newChat = {
@@ -606,10 +636,7 @@ const handleProfilePicUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!currentChatId || currentChatId === 'new') return;
 
     setIsPending(true);
-    form.reset();
-    setFileDataUri(undefined);
-    setFileName(undefined);
-
+    
     abortControllerRef.current = new AbortController();
     const { answer, error } = await getAnswer(data.question, fileDataUri, abortControllerRef.current.signal);
     abortControllerRef.current = null;
@@ -624,8 +651,11 @@ const handleProfilePicUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     setIsPending(false);
   };
   
+  const activeChatTitle = chats?.find(c => c.id === activeChatId)?.title || 'New Chat';
+
   return (
     <>
+    <div className="fixed inset-0 -z-10 h-full w-full bg-background bg-[radial-gradient(ellipse_80%_80%_at_50%_-20%,rgba(120,119,198,0.3),rgba(255,255,255,0))] animate-background-pan" />
     <Dialog open={isUpdateProfileOpen} onOpenChange={setIsUpdateProfileOpen}>
         <DialogContent>
             <DialogHeader>
@@ -673,8 +703,8 @@ const handleProfilePicUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
         </AlertDialogContent>
     </AlertDialog>
     <SidebarProvider>
-      <div className="flex h-svh bg-background text-foreground">
-        <Sidebar className="border-r border-border/20">
+      <div className="flex h-svh bg-transparent text-foreground">
+        <Sidebar className="border-r border-border/20 bg-background/50 backdrop-blur-lg">
           <SidebarHeader>
             <div className="flex items-center gap-2 p-2">
                 <Link href="/" className="inline-block p-1 rounded-full bg-accent/10 border border-accent/20">
@@ -685,12 +715,36 @@ const handleProfilePicUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
             <SidebarTrigger className="absolute top-3 right-3" />
           </SidebarHeader>
           <SidebarContent className="p-2 flex flex-col">
-            <Button variant="outline" className="w-full" onClick={handleNewChat}>
+            <Button variant="ghost" className="w-full border justify-start" onClick={handleNewChat}>
                 <MessageSquarePlus className="mr-2" /> New Chat
             </Button>
-            <div className="flex-1 my-4">
-                {/* Chat history removed as per user request */}
-            </div>
+            <ScrollArea className="flex-1 my-4 -mx-2">
+                <div className="px-2 space-y-1">
+                    {isChatsLoading ? (
+                        [...Array(5)].map((_, i) => <Skeleton key={i} className="h-8 w-full" />)
+                    ) : (
+                        chats?.map(chat => (
+                            <div key={chat.id} className="group relative">
+                                <Button
+                                    variant="ghost"
+                                    className={cn(
+                                        "w-full justify-start truncate",
+                                        activeChatId === chat.id && "bg-accent/20"
+                                    )}
+                                    onClick={() => handleSelectChat(chat.id)}
+                                >
+                                    {chat.title}
+                                </Button>
+                                <div className="absolute top-1/2 -translate-y-1/2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                                    <Button variant="ghost" size="icon" className="h-7 w-7" onClick={(e) => { e.stopPropagation(); setChatToDelete(chat.id)}}>
+                                        <Trash className="h-4 w-4 text-destructive" />
+                                    </Button>
+                                </div>
+                            </div>
+                        ))
+                    )}
+                </div>
+            </ScrollArea>
           </SidebarContent>
           <SidebarFooter>
             <div className="p-2 space-y-2">
@@ -718,12 +772,13 @@ const handleProfilePicUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
           </SidebarFooter>
         </Sidebar>
 
-        <main className="flex-1 flex flex-col h-svh">
-            <header className="flex items-center justify-between p-4 border-b">
+        <main className="flex-1 flex flex-col h-svh bg-transparent">
+            <header className="flex items-center justify-between p-4 border-b bg-background/50 backdrop-blur-lg">
                 <SidebarTrigger className="md:hidden"/>
                 <h1 className="text-lg font-semibold tracking-tight truncate flex-1 text-center">
-                    {activeChatId === 'new' ? 'New Chat' : 'Conversation'}
+                    {activeChatTitle}
                 </h1>
+                <div className="w-8" />
             </header>
             <div className="flex-1 relative">
                 <ScrollArea className="h-full" viewportRef={scrollAreaViewportRef}>
@@ -752,16 +807,18 @@ const handleProfilePicUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
                 </ScrollArea>
                 {!messages || messages.length === 0 && !isMessagesLoading && (
                     <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                        <div className="text-center">
-                            <GraduationCap className="h-12 w-12 mx-auto text-muted-foreground" />
-                            <h2 className="mt-4 text-2xl font-semibold">freechat tutor</h2>
-                            <p className="mt-2 text-muted-foreground">How can I help you today?</p>
-                            <div className="mt-6 grid grid-cols-2 gap-2 text-sm max-w-sm mx-auto">
+                        <div className="text-center p-4">
+                            <div className="inline-block p-4 rounded-full bg-accent/10 border border-accent/20">
+                                <GraduationCap className="h-12 w-12 text-accent" />
+                            </div>
+                            <h2 className="mt-6 text-3xl font-semibold tracking-tight">freechat tutor</h2>
+                            <p className="mt-2 text-muted-foreground">How can I help you learn today?</p>
+                            <div className="mt-8 grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm max-w-md mx-auto">
                                 {examplePrompts.map(prompt => (
                                     <Button 
                                         key={prompt} 
                                         variant="outline" 
-                                        className="text-left justify-start h-auto"
+                                        className="text-left justify-start h-auto py-3 px-4 bg-background/50 hover:bg-muted/50"
                                         onClick={() => form.setValue('question', prompt)}
                                     >
                                         {prompt}
@@ -773,16 +830,16 @@ const handleProfilePicUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
                 )}
             </div>
 
-            <footer className="p-4 border-t">
+            <footer className="p-4 border-t bg-background/50 backdrop-blur-lg">
             <Form {...form}>
-                <form onSubmit={form.handleSubmit(onSubmit)} className="relative">
+                <form onSubmit={form.handleSubmit(onSubmit)} className="relative max-w-3xl mx-auto">
                     {fileDataUri && (
                         <div className="absolute bottom-full left-0 mb-2 w-full">
-                            <div className="p-2 bg-muted rounded-md flex items-center justify-between gap-2">
+                            <div className="p-2 bg-muted rounded-md flex items-center justify-between gap-2 border">
                                 <div className="flex items-center gap-2 text-sm text-muted-foreground truncate">
                                     <FileText className="h-4 w-4" />
                                     <span className="truncate">{fileName}</span>
-                                </div>
+                                d</div>
                                 <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => { setFileDataUri(undefined); setFileName(undefined);}}>
                                     <X className="h-4 w-4" />
                                 </Button>
@@ -826,5 +883,3 @@ const handleProfilePicUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     </>
   );
 }
-
-    
