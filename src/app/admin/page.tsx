@@ -259,45 +259,39 @@ const AdminDashboard = () => {
 export default function AdminPage() {
     const { user, isAdmin, isUserLoading } = useUser();
   
-    // While the user's status is being determined, show a loading spinner.
-    // This prevents any components that fetch data from rendering prematurely.
     if (isUserLoading) {
-      return (
-        <div className="flex h-svh items-center justify-center">
-          <ShieldCheck className="h-8 w-8 animate-spin" />
-        </div>
-      );
+        return (
+            <div className="flex h-svh items-center justify-center">
+                <ShieldCheck className="h-8 w-8 animate-spin" />
+            </div>
+        );
+    }
+
+    if (user && isAdmin) {
+        return <AdminDashboard />;
     }
   
-    // If loading is complete, and the user is both authenticated and an admin,
-    // then and only then, render the main dashboard component.
-    if (!isUserLoading && user && isAdmin) {
-      return <AdminDashboard />;
-    }
-  
-    // If the user is not authenticated, show the login prompt.
     if (!user) {
-      return (
-          <div className="flex h-svh items-center justify-center p-4">
-              <Card className="w-full max-w-sm text-center">
-                  <CardHeader>
-                      <CardTitle>Authentication Required</CardTitle>
-                      <CardDescription>
-                          You must be logged in to access the admin area.
-                      </CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                      <Button asChild>
-                          <Link href="/login">Go to Login</Link>
-                      </Button>
-                  </CardContent>
-              </Card>
-          </div>
-      );
+        return (
+            <div className="flex h-svh items-center justify-center p-4">
+                <Card className="w-full max-w-sm text-center">
+                    <CardHeader>
+                        <CardTitle>Authentication Required</CardTitle>
+                        <CardDescription>
+                            You must be logged in to access the admin area.
+                        </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                        <Button asChild>
+                            <Link href="/login">Go to Login</Link>
+                        </Button>
+                    </CardContent>
+                </Card>
+            </div>
+        );
     }
   
-    // If the user is authenticated but not an admin, show an access denied message.
-    // This case is reached if `!isUserLoading` is true, `user` exists, but `isAdmin` is false.
+    // This case covers user && !isAdmin
     return (
         <div className="flex h-svh items-center justify-center p-4">
             <Card className="w-full max-w-sm text-center">
