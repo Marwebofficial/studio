@@ -27,23 +27,8 @@ export async function generateAnswer(
   signal: AbortSignal
 ): Promise<string> {
   const { question, fileDataUri, history } = input;
-  
-  const prompt: any[] = [];
 
-  // 1. Process and add the chat history to the prompt array.
-  // Each message's content must be an array of Parts.
-  if (history) {
-    history.forEach((msg: Message) => {
-      // Only include user and assistant messages that have string content.
-      if ((msg.role === 'user' || msg.role === 'assistant') && typeof msg.content === 'string') {
-        const role = msg.role === 'assistant' ? 'model' : 'user';
-        // Content MUST be an array of parts, e.g., [{ text: '...' }]
-        prompt.push({ role, content: [{ text: msg.content }] });
-      }
-    });
-  }
-
-  // 2. Prepare the content for the current user question.
+  // 1. Prepare the content for the current user question.
   // The content must be an array of Parts.
   const userContent: any[] = [];
   
@@ -55,12 +40,20 @@ export async function generateAnswer(
   // Add the text part of the user's question.
   userContent.push({ text: question });
 
-  // 3. Add the current user message to the prompt array.
-  prompt.push({ role: 'user', content: userContent });
+  // 2. Process and map the chat history to the format expected by Genkit's `history` option.
+  const processedHistory = history?.map((msg: Message) => {
+    // Only include user and assistant messages that have string content.
+    if ((msg.role === 'user' || msg.role === 'assistant') && typeof msg.content === 'string') {
+      const role = msg.role === 'assistant' ? 'model' : 'user';
+      return { role, content: [{ text: msg.content }] };
+    }
+    return null;
+  }).filter(Boolean); // Filter out any null entries
 
 
   const llmResponse = await ai.generate({
-    prompt: prompt,
+    prompt: userContent, // The prompt is now just the current user message
+    history: processedHistory, // The history is passed as a separate option
     model: 'googleai/gemini-2.5-flash',
     system: `You are a helpful AI assistant named freechat tutor. You are an expert exam writing tutor and a mathematics genius. You can provide practice questions, grade answers, give feedback on writing style, explain complex concepts, and offer exam strategies. You can also answer general questions on any topic.
 
