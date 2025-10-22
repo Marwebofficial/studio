@@ -1,3 +1,4 @@
+
 'use server';
 
 import {
@@ -16,14 +17,16 @@ import {
     generateQuiz,
     type GenerateQuizOutput,
 } from '@/ai/flows/generate-quiz';
+import type { Message } from '@/lib/types';
 
 export async function getAnswer(
   question: string,
   fileDataUri: string | undefined,
+  history: Message[],
   signal: AbortSignal
 ): Promise<{ answer: string; error?: string }> {
   try {
-    const input: GenerateAnswerInput = { question };
+    const input: GenerateAnswerInput = { question, history };
     if (fileDataUri) {
         input.fileDataUri = fileDataUri;
     }
@@ -82,3 +85,5 @@ export async function getQuiz(
         };
     }
 }
+
+    

@@ -290,7 +290,7 @@ export default function Home() {
   }, [user, firestore]);
   const { data: userData } = useDoc(userDocRef);
 
-  const [activeChatId, setActiveChatId] = useState<string | null>('new');
+  const [activeChatId, setActiveChatId] = useState<string | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [isMessagesLoading, setIsMessagesLoading] = useState(false);
 
@@ -316,6 +316,10 @@ export default function Home() {
     resolver: zodResolver(updateProfileFormSchema),
     defaultValues: { displayName: '' },
   });
+
+  useEffect(() => {
+    handleNewChat();
+  }, [user]);
 
   useEffect(() => {
     if (user && user.displayName) {
@@ -358,7 +362,7 @@ export default function Home() {
   const { data: chats, isLoading: isChatsLoading } = useCollection<Chat>(chatsQuery);
 
   const messagesQuery = useMemoFirebase(() => {
-    if (!user || !activeChatId || activeChatId === 'new') return null;
+    if (!user || !activeChatId) return null;
     return query(
         collection(firestore, 'users', user.uid, 'chats', activeChatId, 'messages'),
         orderBy('createdAt', 'asc')
@@ -369,7 +373,7 @@ export default function Home() {
   useEffect(() => {
       if (fetchedMessages) {
           setMessages(fetchedMessages);
-      } else if (activeChatId === 'new') {
+      } else if (!activeChatId) {
           setMessages([]);
       }
       setIsMessagesLoading(isFetchedMessagesLoading);
@@ -377,8 +381,9 @@ export default function Home() {
 
 
   const handleNewChat = () => {
-    setActiveChatId('new');
+    setActiveChatId(null);
     setMessages([]);
+    form.reset();
   };
 
   const handleSelectChat = (chatId: string) => {
@@ -489,7 +494,7 @@ const handleProfilePicUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     setMessages(prev => [...prev, userMessage]);
 
 
-    if (activeChatId === 'new') {
+    if (!activeChatId) {
         const chatsRef = collection(firestore, 'users', user.uid, 'chats');
         const newChat = {
             title: fullCommand.substring(0, 35) + (fullCommand.length > 35 ? '...' : ''),
@@ -507,7 +512,7 @@ const handleProfilePicUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     }
 
 
-    if (!currentChatId || currentChatId === 'new') return;
+    if (!currentChatId) return;
     const messagesRef = collection(firestore, 'users', user.uid, 'chats', currentChatId, 'messages');
     
     setIsPending(true);
@@ -579,8 +584,8 @@ const handleProfilePicUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     
     let currentChatId = activeChatId;
     
-    // Only create a new chat if it's the first message
-    if (activeChatId === 'new') {
+    // Create a new chat if it's the first message of a session
+    if (!activeChatId) {
         const chatsRef = collection(firestore, 'users', user.uid, 'chats');
         const newChat = {
             title: data.question.substring(0, 35) + (data.question.length > 35 ? '...' : ''),
@@ -591,7 +596,7 @@ const handleProfilePicUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
         setActiveChatId(docRef.id);
     }
 
-    if (!currentChatId || currentChatId === 'new') return;
+    if (!currentChatId) return;
 
     const userMessage: Message = {
       id: Date.now().toString(),
@@ -601,7 +606,8 @@ const handleProfilePicUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
       fileDataUri: fileDataUri
     };
     
-    setMessages(prev => [...prev, userMessage]);
+    const messagesWithUser = [...messages, userMessage];
+    setMessages(messagesWithUser);
     form.reset();
     setFileDataUri(undefined);
     setFileName(undefined);
@@ -618,7 +624,7 @@ const handleProfilePicUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     setIsPending(true);
     
     abortControllerRef.current = new AbortController();
-    const { answer, error } = await getAnswer(data.question, fileDataUri, abortControllerRef.current.signal);
+    const { answer, error } = await getAnswer(data.question, fileDataUri, messagesWithUser.slice(0, -1), abortControllerRef.current.signal);
     abortControllerRef.current = null;
     
     if (error) {
@@ -686,8 +692,8 @@ const handleProfilePicUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     </AlertDialog>
     <SidebarProvider>
         <div className="flex h-svh w-full items-center justify-center">
-            <div className="flex h-svh w-full max-w-6xl bg-transparent text-foreground">
-                <Sidebar className="border-r border-primary/20 bg-background/50 backdrop-blur-xl">
+        <div className="flex h-svh w-full max-w-6xl bg-card/50 backdrop-blur-3xl border border-primary/20 rounded-lg">
+                <Sidebar className="border-r border-primary/20 bg-transparent">
                 <SidebarHeader>
                     <div className="flex items-center gap-2 p-2">
                         <Link href="/" className="flex items-center gap-2 group">
@@ -760,7 +766,7 @@ const handleProfilePicUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
                 </Sidebar>
 
                 <main className="flex-1 flex flex-col h-svh bg-transparent">
-                    <header className="flex items-center justify-between p-4 border-b border-primary/20 bg-background/50 backdrop-blur-lg md:pl-0 sticky top-0 z-10">
+                    <header className="flex items-center justify-between p-4 border-b border-primary/20 bg-transparent md:pl-0 sticky top-0 z-10">
                         <SidebarTrigger className="md:hidden"/>
                         <h1 className="text-lg font-heading tracking-tight truncate flex-1 text-center font-medium text-primary">
                             {activeChatTitle}
@@ -770,7 +776,7 @@ const handleProfilePicUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
                     <div className="flex-1 relative">
                         <ScrollArea className="h-full" viewportRef={scrollAreaViewportRef}>
                             <div className="p-4 md:p-6 space-y-8">
-                            {isMessagesLoading ? (
+                            {isMessagesLoading && !activeChatId ? (
                                 <LoadingMessage />
                             ) : (
                                 messages?.map((message, index) => {
@@ -797,7 +803,7 @@ const handleProfilePicUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
                                     </div>
                                     <h2 className="mt-6 text-3xl font-heading font-medium tracking-tight">Meet FreeChat</h2>
                                     <p className="mt-2 text-muted-foreground">The AI Tutor That Learns With You</p>
-                                    <div className="mt-8 grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm max-w-lg mx-auto">
+                                    <div className="mt-8 grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm max-w-xl mx-auto">
                                         {examplePrompts.map(prompt => (
                                             <Button 
                                                 key={prompt} 
@@ -815,7 +821,7 @@ const handleProfilePicUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
                         )}
                     </div>
 
-                    <footer className="p-4 border-t border-primary/20 bg-background/50 backdrop-blur-lg">
+                    <footer className="p-4 border-t border-primary/20 bg-transparent">
                     <Form {...form}>
                         <form onSubmit={form.handleSubmit(onSubmit)} className="relative max-w-4xl mx-auto">
                             {fileDataUri && (
@@ -870,7 +876,5 @@ const handleProfilePicUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     </>
   );
 }
-
-    
 
     
