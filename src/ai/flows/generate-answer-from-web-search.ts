@@ -31,27 +31,31 @@ export async function generateAnswer(
   const prompt: any[] = [];
 
   // 1. Process and add the chat history to the prompt array.
-  // Ensure content is always a plain string for history items.
+  // Each message's content must be an array of Parts.
   if (history) {
     history.forEach((msg: Message) => {
       // Only include user and assistant messages that have string content.
       if ((msg.role === 'user' || msg.role === 'assistant') && typeof msg.content === 'string') {
         const role = msg.role === 'assistant' ? 'model' : 'user';
-        prompt.push({ role, content: msg.content });
+        // Content MUST be an array of parts, e.g., [{ text: '...' }]
+        prompt.push({ role, content: [{ text: msg.content }] });
       }
     });
   }
 
   // 2. Prepare the content for the current user question.
-  const userContent: any[] = [{ text: question }];
+  // The content must be an array of Parts.
+  const userContent: any[] = [];
+  
   if (fileDataUri) {
-    // If a file is attached, prepend the media object to the content array.
-    userContent.unshift({ media: { url: fileDataUri } });
+    // If a file is attached, add the media part first.
+    userContent.push({ media: { url: fileDataUri } });
   }
 
-  // 3. Add the current user question to the prompt array.
-  // If there's a file, content will be an array [media, text].
-  // If not, it will be a single-element array [text], which Genkit handles correctly.
+  // Add the text part of the user's question.
+  userContent.push({ text: question });
+
+  // 3. Add the current user message to the prompt array.
   prompt.push({ role: 'user', content: userContent });
 
 
