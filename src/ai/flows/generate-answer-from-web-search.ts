@@ -28,29 +28,29 @@ export async function generateAnswer(
 ): Promise<string> {
   const { question, fileDataUri, history } = input;
   
-  const prompt = [];
-  
+  const prompt: any[] = [];
+
+  // Add history to the prompt, converting roles to 'user' or 'model'
   if (history) {
     history.forEach((msg: Message) => {
-        // We only process string content from history for context
-        if (typeof msg.content === 'string') {
-          // The role should be 'user' or 'model' for the Gemini API
-          const role = msg.role === 'assistant' ? 'model' : msg.role;
-          if (role === 'user' || role === 'model') {
-            prompt.push({ role, content: [{ text: msg.content }] });
-          }
+      if (typeof msg.content === 'string') {
+        const role = msg.role === 'assistant' ? 'model' : 'user';
+        if (msg.role !== 'error' && msg.role !== 'system') {
+           prompt.push({ role, content: msg.content });
         }
+      }
     });
   }
-  
-  const currentMessageContent: any[] = [{ text: question }];
+
+  // Add the current user question, including an image if provided
+  const userParts: any[] = [{ text: question }];
   if (fileDataUri) {
-    currentMessageContent.unshift({ media: { url: fileDataUri } });
+    userParts.unshift({ media: { url: fileDataUri } });
   }
-  prompt.push({ role: 'user', content: currentMessageContent });
+  prompt.push({ role: 'user', content: userParts });
 
   const llmResponse = await ai.generate({
-    prompt: prompt as any,
+    prompt: prompt,
     model: 'googleai/gemini-2.5-flash',
     system: `You are a helpful AI assistant named freechat tutor. You are an expert exam writing tutor and a mathematics genius. You can provide practice questions, grade answers, give feedback on writing style, explain complex concepts, and offer exam strategies. You can also answer general questions on any topic.
 
