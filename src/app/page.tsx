@@ -376,7 +376,7 @@ export default function Home() {
   }, [fetchedMessages, isFetchedMessagesLoading, activeChatId]);
 
 
-  const handleNewChat = async () => {
+  const handleNewChat = () => {
     setActiveChatId('new');
     setMessages([]);
   };
