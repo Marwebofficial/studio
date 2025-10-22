@@ -64,7 +64,7 @@ import {
   SidebarHeader,
   SidebarContent,
   SidebarTrigger,
-  SidebarFooter,
+  SidebarFooter
 } from '@/components/ui/sidebar';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useTypingEffect } from '@/hooks/use-typing-effect';
@@ -79,11 +79,6 @@ const formSchema = z.object({
   question: z.string().trim().min(1, 'Please enter a question.'),
 });
 
-const settingsFormSchema = z.object({
-    title: z.string().min(1, 'Please enter a title.'),
-    content: z.string().optional(),
-});
-
 const updateProfileFormSchema = z.object({
     displayName: z.string().min(2, { message: "Name must be at least 2 characters."}),
 });
@@ -94,18 +89,22 @@ const UserMessage = ({ content, fileDataUri, createdAt, profilePic }: { content:
     
     const formatDate = (dateValue: any) => {
         if (!dateValue) return '';
-        // Firestore timestamps can be objects with seconds and nanoseconds
-        if (dateValue.seconds) {
+        if (dateValue && typeof dateValue.toDate === 'function') {
             return format(dateValue.toDate(), 'HH:mm');
         }
-        // It might be an ISO string for optimistically rendered messages
-        return format(new Date(dateValue), 'HH:mm');
+        if (typeof dateValue === 'string') {
+            const date = new Date(dateValue);
+            if (!isNaN(date.getTime())) {
+                return format(date, 'HH:mm');
+            }
+        }
+        return '';
     };
 
     return (
-        <div className="flex items-start gap-3 justify-end">
+        <div className="flex items-start gap-3 justify-end group">
           <div className="max-w-2xl w-full space-y-2">
-            <div className="bg-primary/10 border border-primary/20 text-foreground p-3 rounded-xl rounded-br-none backdrop-blur-sm">
+            <div className="bg-primary/10 border border-primary/20 text-foreground p-3 rounded-xl rounded-br-none backdrop-blur-sm shadow-lg shadow-primary/5">
               {fileDataUri && isImage && (
                 <Image 
                   src={fileDataUri} 
@@ -121,15 +120,15 @@ const UserMessage = ({ content, fileDataUri, createdAt, profilePic }: { content:
                     <span>Attached file</span>
                 </div>
               )}
-              <p className="text-sm text-foreground">{content}</p>
+              <p className="text-sm text-foreground whitespace-pre-wrap">{content}</p>
             </div>
-            <div className="text-xs text-muted-foreground text-right">
+            <div className="text-xs text-muted-foreground text-right pr-2 opacity-0 group-hover:opacity-100 transition-opacity">
                 {formatDate(createdAt)}
             </div>
           </div>
-          <Avatar className="h-8 w-8 border-2 border-primary/50">
+          <Avatar className="h-8 w-8 border-2 border-primary/50 shadow-lg shadow-primary/10">
             <AvatarImage src={profilePic ?? undefined} alt="User profile picture" />
-            <AvatarFallback className="bg-transparent">
+            <AvatarFallback className="bg-background">
               <User className="h-4 w-4 text-primary" />
             </AvatarFallback>
           </Avatar>
@@ -194,14 +193,14 @@ const AssistantMessage = ({ message, isLastMessage, isPending }: { message: Mess
     }
 
       return (
-        <div className="flex items-start gap-3">
-          <Avatar className="h-8 w-8 border-2 border-accent/50">
-            <AvatarFallback className="bg-transparent">
-              <Bot className="h-4 w-4 text-accent" />
+        <div className="flex items-start gap-3 group">
+          <Avatar className="h-8 w-8 border-2 border-secondary/50 shadow-lg shadow-secondary/10">
+            <AvatarFallback className="bg-background">
+              <Bot className="h-4 w-4 text-secondary" />
             </AvatarFallback>
           </Avatar>
           <div className="max-w-2xl w-full space-y-2">
-              <div className="bg-accent/10 p-3 rounded-xl rounded-bl-none border border-accent/20 group relative backdrop-blur-sm">
+              <div className="bg-secondary/10 p-3 rounded-xl rounded-bl-none border border-secondary/20 group relative backdrop-blur-sm shadow-lg shadow-secondary/5">
                   {message.imageUrl && <Image src={message.imageUrl} alt={typeof content === 'string' ? content : 'Generated image'} width={512} height={512} className="rounded-lg mb-2" />}
                   <div className="prose prose-sm prose-invert max-w-none text-foreground pb-6">
                       {renderContent}
@@ -211,9 +210,9 @@ const AssistantMessage = ({ message, isLastMessage, isPending }: { message: Mess
                       <Button 
                           size="icon" 
                           variant="ghost"
-                          className="h-7 w-7"
+                          className="h-7 w-7 text-secondary"
                       >
-                          <Square className="h-4 w-4" />
+                          <Square className="h-4 w-4 animate-pulse" />
                       </Button>
                     )}
                     {isStringContent && (content as string).length > 0 && !message.quiz && (
@@ -222,7 +221,7 @@ const AssistantMessage = ({ message, isLastMessage, isPending }: { message: Mess
                           variant="ghost" 
                           onClick={handleSpeak} 
                           disabled={isGenerating}
-                          className="h-7 w-7"
+                          className="h-7 w-7 text-secondary"
                       >
                           {isGenerating ? <Loader className="h-4 w-4 animate-spin" /> : <Volume2 className="h-4 w-4" />}
                       </Button>
@@ -234,53 +233,6 @@ const AssistantMessage = ({ message, isLastMessage, isPending }: { message: Mess
       );
     };
   
-const StudentProgramMessage = ({ programs }: { programs: any[] }) => {
-    return (
-        <div className="flex items-start gap-3">
-            <Avatar className="h-8 w-8 border-2 border-accent/50">
-                <AvatarFallback className="bg-transparent">
-                    <BookCopy className="h-4 w-4 text-accent" />
-                </AvatarFallback>
-            </Avatar>
-            <div className="max-w-xl w-full space-y-2">
-                <div className="bg-accent/10 p-3 rounded-xl rounded-bl-none border border-accent/20">
-                    <div className="prose prose-sm prose-invert max-w-none text-foreground">
-                        <h3 className="text-foreground">Student Program Entries</h3>
-                        {programs.length > 0 ? (
-                            <ul className="space-y-4">
-                                {programs.map(program => (
-                                    <li key={program.id} className="not-prose">
-                                        <Card className="bg-background/50">
-                                            <CardHeader>
-                                                <CardTitle className="text-base">{program.title}</CardTitle>
-                                            </CardHeader>
-                                            <CardContent>
-                                                {program.content && <p className="text-sm">{program.content}</p>}
-                                                {program.fileDataUri && (
-                                                    program.fileDataUri.startsWith('data:image') ? (
-                                                        <Image src={program.fileDataUri} alt={program.title} width={200} height={200} className="rounded-md mt-2" />
-                                                    ) : (
-                                                        <div className="mt-2 flex items-center gap-2 text-sm text-foreground/80">
-                                                            <FileText className="h-4 w-4" />
-                                                            <span>{program.fileName || 'Attached file'}</span>
-                                                        </div>
-                                                    )
-                                                )}
-                                            </CardContent>
-                                        </Card>
-                                    </li>
-                                ))}
-                            </ul>
-                        ) : (
-                            <p>No student program settings have been saved yet. Use the `studentprogramsetting` command to add one.</p>
-                        )}
-                    </div>
-                </div>
-            </div>
-        </div>
-    );
-};
-  
 const ErrorMessage = ({ content }: { content: string }) => (
     <div className="flex items-start gap-4">
       <Avatar className="h-8 w-8 border bg-destructive text-destructive-foreground">
@@ -289,8 +241,8 @@ const ErrorMessage = ({ content }: { content: string }) => (
         </AvatarFallback>
       </Avatar>
       <div className="flex-1 space-y-2">
-        <p className="font-semibold text-destructive">Error</p>
         <div className="prose prose-sm max-w-none text-destructive">
+            <p className="font-semibold">Error</p>
             <p>{content}</p>
         </div>
       </div>
@@ -299,13 +251,13 @@ const ErrorMessage = ({ content }: { content: string }) => (
 
 const LoadingMessage = () => (
     <div className="flex items-start gap-3">
-      <Avatar className="h-8 w-8 border-2 border-accent/50">
-        <AvatarFallback className="bg-transparent">
-          <Bot className="h-4 w-4 text-accent" />
+      <Avatar className="h-8 w-8 border-2 border-secondary/50 shadow-lg shadow-secondary/10">
+        <AvatarFallback className="bg-background">
+          <Bot className="h-4 w-4 text-secondary animate-pulse" />
         </AvatarFallback>
       </Avatar>
       <div className="max-w-2xl w-full space-y-4">
-        <div className="bg-accent/10 p-3 rounded-xl rounded-bl-none border border-accent/20 backdrop-blur-sm">
+        <div className="bg-secondary/10 p-3 rounded-xl rounded-bl-none border border-secondary/20 backdrop-blur-sm shadow-lg shadow-secondary/5">
             <div className="space-y-2">
                 <Skeleton className="h-4 w-5/6 bg-muted/50" />
                 <Skeleton className="h-4 w-full bg-muted/50" />
@@ -317,10 +269,10 @@ const LoadingMessage = () => (
 );
 
 const examplePrompts = [
-    'Explain the theory of relativity',
-    '/imagine a futuristic city skyline',
-    'What is the capital of Australia?',
-    '/quiz me on javascript fundamentals',
+    'Explain the theory of relativity like I am five',
+    '/imagine a holographic brain visualizing complex data',
+    'What is quantum computing?',
+    '/quiz me on advanced javascript concepts',
 ];
 
 export default function Home() {
@@ -344,14 +296,8 @@ export default function Home() {
   const [isPending, setIsPending] = useState(false);
   const scrollAreaViewportRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const settingsFileInputRef = useRef<HTMLInputElement>(null);
   const profilePicInputRef = useRef<HTMLInputElement>(null);
   const [chatToDelete, setChatToDelete] = useState<string | null>(null);
-  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-  const [isEditProgramOpen, setIsEditProgramOpen] = useState(false);
-  const [programToEdit, setProgramToEdit] = useState<any | null>(null);
-  const [programToDelete, setProgramToDelete] = useState<string | null>(null);
-  const [studentPrograms, setStudentPrograms] = useState<any[]>([]);
   const [profilePic, setProfilePic] = useState<string | null>(null);
   const [isUpdateProfileOpen, setIsUpdateProfileOpen] = useState(false);
   const abortControllerRef = useRef<AbortController | null>(null);
@@ -361,11 +307,6 @@ export default function Home() {
     defaultValues: {
       question: '',
     },
-  });
-
-  const settingsForm = useForm<z.infer<typeof settingsFormSchema>>({
-    resolver: zodResolver(settingsFormSchema),
-    defaultValues: { title: '', content: '' },
   });
 
   const updateProfileForm = useForm<z.infer<typeof updateProfileFormSchema>>({
@@ -464,7 +405,7 @@ export default function Home() {
 
         toast({
             title: 'Chat Deleted',
-            description: 'The chat and all its messages have been removed.',
+            description: 'The conversation has been removed from history.',
         });
 
         if (activeChatId === chatToDelete) {
@@ -495,17 +436,6 @@ export default function Home() {
     if (e.target) e.target.value = '';
   };
   
-  const handleSettingsFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-        const reader = new FileReader();
-        reader.onload = (loadEvent) => {
-            settingsForm.setValue('content', loadEvent.target?.result as string);
-        };
-        reader.readAsDataURL(file);
-    }
-    if (e.target) e.target.value = '';
-};
 
 const handleProfilePicUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -559,7 +489,7 @@ const handleProfilePicUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (activeChatId === 'new') {
         const chatsRef = collection(firestore, 'users', user.uid, 'chats');
         const newChat = {
-            title: fullCommand.substring(0, 25) + (fullCommand.length > 25 ? '...' : ''),
+            title: fullCommand.substring(0, 35) + (fullCommand.length > 35 ? '...' : ''),
             createdAt: serverTimestamp(),
         };
         const docRef = await addDoc(chatsRef, newChat);
@@ -646,11 +576,10 @@ const handleProfilePicUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     
     let currentChatId = activeChatId;
     
-    // Create new chat in Firestore if it's the first message
     if (activeChatId === 'new') {
         const chatsRef = collection(firestore, 'users', user.uid, 'chats');
         const newChat = {
-            title: data.question.substring(0, 25) + (data.question.length > 25 ? '...' : ''),
+            title: data.question.substring(0, 35) + (data.question.length > 35 ? '...' : ''),
             createdAt: serverTimestamp(),
         };
         const docRef = await addDoc(chatsRef, newChat);
@@ -658,7 +587,7 @@ const handleProfilePicUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
         setActiveChatId(docRef.id);
     }
 
-    if (!currentChatId || currentChatId === 'new') return; // Should not happen after the above block
+    if (!currentChatId || currentChatId === 'new') return;
 
     const userMessage: Message = {
       id: Date.now().toString(),
@@ -668,13 +597,11 @@ const handleProfilePicUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
       fileDataUri: fileDataUri
     };
     
-    // Optimistically update UI
     setMessages(prev => [...prev, userMessage]);
     form.reset();
     setFileDataUri(undefined);
     setFileName(undefined);
 
-    // Save user message to Firestore
     const messagesRef = collection(firestore, 'users', user.uid, 'chats', currentChatId, 'messages');
     await addDoc(messagesRef, {
         role: 'user',
@@ -699,17 +626,20 @@ const handleProfilePicUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     setIsPending(false);
   };
   
-  const activeChatTitle = chats?.find(c => c.id === activeChatId)?.title || 'New Chat';
+  const activeChatTitle = chats?.find(c => c.id === activeChatId)?.title || 'New Conversation';
 
   return (
     <>
-    <div className="fixed inset-0 -z-10 h-full w-full bg-background bg-[radial-gradient(ellipse_80%_80%_at_50%_-20%,rgba(120,119,198,0.3),rgba(255,255,255,0))] animate-background-pan" />
+    <div className="fixed inset-0 -z-10 h-full w-full bg-background">
+      <div className="absolute inset-0 z-0 bg-[radial-gradient(ellipse_80%_80%_at_50%_-20%,hsl(var(--primary)/0.15),#040b1e00)]" />
+      <div className="absolute bottom-0 left-0 z-0 h-1/3 w-full bg-gradient-to-t from-background to-transparent" />
+    </div>
     <Dialog open={isUpdateProfileOpen} onOpenChange={setIsUpdateProfileOpen}>
-        <DialogContent>
+        <DialogContent className="bg-background/80 backdrop-blur-lg border-primary/20">
             <DialogHeader>
-                <DialogTitle>Update Your Profile</DialogTitle>
+                <DialogTitle className="font-heading">Update Your Profile</DialogTitle>
                 <DialogDescription>
-                    It looks like you haven't set your name yet. Please enter it below.
+                    Welcome to the future of learning. Let's start with your name.
                 </DialogDescription>
             </DialogHeader>
             <Form {...updateProfileForm}>
@@ -728,7 +658,7 @@ const handleProfilePicUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
                         )}
                     />
                     <DialogFooter>
-                        <Button type="submit" disabled={updateProfileForm.formState.isSubmitting}>
+                        <Button type="submit" disabled={updateProfileForm.formState.isSubmitting} variant="outline" className="bg-primary/10 hover:bg-primary/20 border-primary/20 text-primary">
                             {updateProfileForm.formState.isSubmitting ? 'Saving...' : 'Save'}
                         </Button>
                     </DialogFooter>
@@ -737,48 +667,49 @@ const handleProfilePicUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
         </DialogContent>
     </Dialog>
     <AlertDialog open={!!chatToDelete} onOpenChange={(open) => !open && setChatToDelete(null)}>
-        <AlertDialogContent>
+        <AlertDialogContent className="bg-background/80 backdrop-blur-lg border-destructive/30">
             <AlertDialogHeader>
-                <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+                <AlertDialogTitle className="font-heading">Are you absolutely sure?</AlertDialogTitle>
                 <AlertDialogDescription>
-                    This will permanently delete the chat and all of its messages. This action cannot be undone.
+                    This will permanently delete this conversation. This action cannot be undone.
                 </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
                 <AlertDialogCancel onClick={() => setChatToDelete(null)}>Cancel</AlertDialogCancel>
-                <AlertDialogAction onClick={confirmDeleteChat}>Delete</AlertDialogAction>
+                <AlertDialogAction onClick={confirmDeleteChat} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">Delete</AlertDialogAction>
             </AlertDialogFooter>
         </AlertDialogContent>
     </AlertDialog>
     <SidebarProvider>
       <div className="flex h-svh bg-transparent text-foreground">
-        <Sidebar className="border-r border-border/20 bg-background/50 backdrop-blur-lg">
+        <Sidebar className="border-r border-primary/20 bg-background/50 backdrop-blur-xl">
           <SidebarHeader>
             <div className="flex items-center gap-2 p-2">
-                <Link href="/" className="inline-block p-1 rounded-full bg-accent/10 border border-accent/20">
-                    <GraduationCap className="h-5 w-5 text-accent" />
+                <Link href="/" className="flex items-center gap-2 group">
+                    <div className="p-1.5 rounded-lg bg-primary/10 border border-primary/20 group-hover:bg-primary/20 transition-colors">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="hsl(var(--primary))" strokeWidth="2" className="h-5 w-5"><path d="M3 12h2.5l1.5-3 3 6 3-6 1.5 3H19"/></svg>
+                    </div>
+                    <h2 className="text-lg font-heading tracking-tight font-medium">FreeChat</h2>
                 </Link>
-              <h2 className="text-lg font-semibold tracking-tight">freechat tutor</h2>
             </div>
-            <SidebarTrigger className="absolute top-3 right-3" />
           </SidebarHeader>
           <SidebarContent className="p-2 flex flex-col">
-            <Button variant="ghost" className="w-full border justify-start" onClick={handleNewChat}>
+            <Button variant="ghost" className="w-full border border-primary/20 justify-start hover:bg-primary/10 hover:text-primary" onClick={handleNewChat}>
                 <MessageSquarePlus className="mr-2" /> New Chat
             </Button>
             <ScrollArea className="flex-1 my-4">
               <div className="px-2 space-y-1">
-                <h3 className="px-2 text-xs font-semibold text-muted-foreground tracking-wider">CHAT HISTORY</h3>
+                <h3 className="px-2 text-xs font-semibold text-muted-foreground tracking-wider font-sans">CHAT HISTORY</h3>
                 {isChatsLoading ? (
-                  <div className="space-y-2">
-                    {[...Array(3)].map((_, i) => <Skeleton key={i} className="h-9 w-full" />)}
+                  <div className="space-y-2 pt-2">
+                    {[...Array(3)].map((_, i) => <Skeleton key={i} className="h-9 w-full bg-muted/80" />)}
                   </div>
                 ) : (
                   chats?.map((chat) => (
                     <div key={chat.id} className="group relative">
                       <Button
                           variant="ghost"
-                          className={cn("w-full justify-start truncate", activeChatId === chat.id && "bg-accent/20")}
+                          className={cn("w-full justify-start truncate pr-8", activeChatId === chat.id && "bg-primary/10 text-primary")}
                           onClick={() => handleSelectChat(chat.id)}
                       >
                           {chat.title}
@@ -786,7 +717,7 @@ const handleProfilePicUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
                       <Button 
                         variant="ghost" 
                         size="icon" 
-                        className="absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7 opacity-0 group-hover:opacity-100"
+                        className="absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7 opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-destructive"
                         onClick={() => handleDeleteChat(chat.id)}
                       >
                         <Trash className="h-4 w-4" />
@@ -798,9 +729,9 @@ const handleProfilePicUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
             </ScrollArea>
           </SidebarContent>
           <SidebarFooter>
-            <div className="p-2 space-y-2">
+            <div className="p-2 space-y-2 border-t border-primary/20">
                 {user && (
-                    <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-3 p-2 rounded-lg hover:bg-muted/50">
                         <Avatar className="h-9 w-9 cursor-pointer" onClick={() => profilePicInputRef.current?.click()}>
                            <AvatarImage src={profilePic ?? undefined} alt="Profile picture" />
                             <AvatarFallback>
@@ -812,11 +743,11 @@ const handleProfilePicUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
                             <p className="font-semibold truncate">{user.displayName || 'Anonymous User'}</p>
                             <p className="text-xs text-muted-foreground truncate">{user.email}</p>
                         </div>
-                        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setIsUpdateProfileOpen(true)}><Edit /></Button>
+                        <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-foreground" onClick={() => setIsUpdateProfileOpen(true)}><Edit /></Button>
                     </div>
                 )}
                 <div className="flex items-center gap-2">
-                    {isAdmin && <Button variant="outline" className="flex-1" asChild><Link href="/admin"><Shield /> Admin</Link></Button>}
+                    {isAdmin && <Button variant="outline" className="flex-1 border-secondary/50 text-secondary hover:bg-secondary/10" asChild><Link href="/admin"><Shield /> Admin</Link></Button>}
                     <Button variant="destructive" className="flex-1" onClick={handleLogout}><LogOut /> Logout</Button>
                 </div>
             </div>
@@ -824,16 +755,16 @@ const handleProfilePicUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
         </Sidebar>
 
         <main className="flex-1 flex flex-col h-svh bg-transparent">
-            <header className="flex items-center justify-between p-4 border-b bg-background/50 backdrop-blur-lg md:pl-0">
+            <header className="flex items-center justify-between p-4 border-b border-primary/20 bg-background/50 backdrop-blur-lg md:pl-0 sticky top-0 z-10">
                 <SidebarTrigger className="md:hidden"/>
-                <h1 className="text-lg font-semibold tracking-tight truncate flex-1 text-center">
+                <h1 className="text-lg font-heading tracking-tight truncate flex-1 text-center font-medium text-primary">
                     {activeChatTitle}
                 </h1>
-                <div className="w-8" />
+                <div className="w-8 md:w-0" />
             </header>
             <div className="flex-1 relative">
                 <ScrollArea className="h-full" viewportRef={scrollAreaViewportRef}>
-                    <div className="p-4 md:p-6 space-y-6">
+                    <div className="p-4 md:p-6 space-y-8">
                     {isMessagesLoading ? (
                         <LoadingMessage />
                     ) : (
@@ -843,9 +774,6 @@ const handleProfilePicUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
                         }
                         if (message.role === 'assistant') {
                             return <AssistantMessage key={message.id} message={message} isLastMessage={index === messages.length - 1} isPending={isPending} />;
-                        }
-                        if (message.role === 'system' && message.programs) {
-                            return <StudentProgramMessage key={message.id} programs={message.programs} />
                         }
                         if (message.role === 'error') {
                             return <ErrorMessage key={message.id} content={message.content as string} />;
@@ -859,20 +787,21 @@ const handleProfilePicUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
                 {!messages || messages.length === 0 && !isMessagesLoading && (
                     <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
                         <div className="text-center p-4">
-                            <div className="inline-block p-4 rounded-full bg-accent/10 border border-accent/20">
-                                <GraduationCap className="h-12 w-12 text-accent" />
+                            <div className="inline-block p-4 rounded-full bg-primary/10 border border-primary/20 shadow-lg shadow-primary/10">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="hsl(var(--primary))" strokeWidth="1.5" className="h-12 w-12"><path d="M3 12h2.5l1.5-3 3 6 3-6 1.5 3H19"/></svg>
                             </div>
-                            <h2 className="mt-6 text-3xl font-semibold tracking-tight">freechat tutor</h2>
-                            <p className="mt-2 text-muted-foreground">How can I help you learn today?</p>
-                            <div className="mt-8 grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm max-w-md mx-auto">
+                            <h2 className="mt-6 text-3xl font-heading font-medium tracking-tight">Meet FreeChat</h2>
+                            <p className="mt-2 text-muted-foreground">The AI Tutor That Learns With You</p>
+                            <div className="mt-8 grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm max-w-lg mx-auto">
                                 {examplePrompts.map(prompt => (
                                     <Button 
                                         key={prompt} 
                                         variant="outline" 
-                                        className="text-left justify-start h-auto py-3 px-4 bg-background/50 hover:bg-muted/50"
+                                        className="text-left justify-start h-auto py-3 px-4 bg-background/50 hover:bg-muted/50 border-input pointer-events-auto"
                                         onClick={() => form.setValue('question', prompt)}
                                     >
-                                        {prompt}
+                                        {prompt.startsWith('/') ? <span className="text-primary mr-2">{prompt.split(' ')[0]}</span> : null}
+                                        {prompt.startsWith('/') ? prompt.substring(prompt.indexOf(' ') + 1) : prompt}
                                     </Button>
                                 ))}
                             </div>
@@ -881,12 +810,12 @@ const handleProfilePicUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
                 )}
             </div>
 
-            <footer className="p-4 border-t bg-background/50 backdrop-blur-lg">
+            <footer className="p-4 border-t border-primary/20 bg-background/50 backdrop-blur-lg">
             <Form {...form}>
                 <form onSubmit={form.handleSubmit(onSubmit)} className="relative max-w-3xl mx-auto">
                     {fileDataUri && (
                         <div className="absolute bottom-full left-0 mb-2 w-full">
-                            <div className="p-2 bg-muted rounded-md flex items-center justify-between gap-2 border">
+                            <div className="p-2 bg-muted rounded-md flex items-center justify-between gap-2 border border-input">
                                 <div className="flex items-center gap-2 text-sm text-muted-foreground truncate">
                                     <FileText className="h-4 w-4" />
                                     <span className="truncate">{fileName}</span>
@@ -900,7 +829,7 @@ const handleProfilePicUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
                     <Textarea
                         {...form.register('question')}
                         placeholder="Ask anything or type '/' for commands..."
-                        className="pr-28"
+                        className="pr-28 bg-input border-input focus-visible:ring-primary/50"
                         rows={1}
                         onKeyDown={(e) => {
                             if (e.key === 'Enter' && !e.shiftKey) {
@@ -917,11 +846,12 @@ const handleProfilePicUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
                             size="icon"
                             onClick={() => fileInputRef.current?.click()}
                             disabled={isPending}
+                            className="text-muted-foreground hover:text-primary"
                         >
                             <Paperclip />
                         </Button>
                         <input type="file" ref={fileInputRef} onChange={handleFileUpload} className="hidden" />
-                        <Button type="submit" size="icon" disabled={isPending}>
+                        <Button type="submit" size="icon" disabled={isPending || !form.formState.isValid} className="bg-primary text-primary-foreground hover:bg-primary/90 disabled:bg-primary/50">
                             <Send />
                         </Button>
                     </div>
@@ -934,4 +864,3 @@ const handleProfilePicUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     </>
   );
 }
-
