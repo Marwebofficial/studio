@@ -32,8 +32,13 @@ export async function generateAnswer(
   
   if (history) {
     history.forEach((msg: Message) => {
+        // We only process string content from history for context
         if (typeof msg.content === 'string') {
-            prompt.push({ role: msg.role, content: [{ text: msg.content }] });
+          // The role should be 'user' or 'model' for the Gemini API
+          const role = msg.role === 'assistant' ? 'model' : msg.role;
+          if (role === 'user' || role === 'model') {
+            prompt.push({ role, content: [{ text: msg.content }] });
+          }
         }
     });
   }
