@@ -583,15 +583,17 @@ const handleProfilePicUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     }
     
     let currentChatId = activeChatId;
+    let isNewChat = false;
     
     // Create a new chat if it's the first message of a session
     if (!activeChatId) {
+        isNewChat = true;
         const chatsRef = collection(firestore, 'users', user.uid, 'chats');
-        const newChat = {
+        const newChatData = {
             title: data.question.substring(0, 35) + (data.question.length > 35 ? '...' : ''),
             createdAt: serverTimestamp(),
         };
-        const docRef = await addDoc(chatsRef, newChat);
+        const docRef = await addDoc(chatsRef, newChatData);
         currentChatId = docRef.id;
         setActiveChatId(docRef.id);
     }
@@ -606,8 +608,11 @@ const handleProfilePicUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
       fileDataUri: fileDataUri
     };
     
-    const messagesWithUser = [...messages, userMessage];
+    // If it's a new chat, we start with just the user's message.
+    // Otherwise, we use the existing messages.
+    const messagesWithUser = isNewChat ? [userMessage] : [...messages, userMessage];
     setMessages(messagesWithUser);
+
     form.reset();
     setFileDataUri(undefined);
     setFileName(undefined);
@@ -623,8 +628,18 @@ const handleProfilePicUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
 
     setIsPending(true);
     
+    // Prepare history for the server action, excluding the latest message
+    const historyForAI = messagesWithUser.slice(0, -1).map(msg => {
+      // Sanitize the createdAt field for server action
+      const sanitizedMsg = { ...msg };
+      if (sanitizedMsg.createdAt && typeof sanitizedMsg.createdAt.toDate === 'function') {
+        sanitizedMsg.createdAt = (sanitizedMsg.createdAt as Timestamp).toDate().toISOString();
+      }
+      return sanitizedMsg;
+    });
+
     abortControllerRef.current = new AbortController();
-    const { answer, error } = await getAnswer(data.question, fileDataUri, messagesWithUser.slice(0, -1), abortControllerRef.current.signal);
+    const { answer, error } = await getAnswer(data.question, fileDataUri, historyForAI, abortControllerRef.current.signal);
     abortControllerRef.current = null;
     
     if (error) {
@@ -876,5 +891,7 @@ const handleProfilePicUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     </>
   );
 }
+
+    
 
     
