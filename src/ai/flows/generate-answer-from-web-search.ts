@@ -30,24 +30,30 @@ export async function generateAnswer(
   
   const prompt: any[] = [];
 
-  // Add history to the prompt, converting roles to 'user' or 'model'
+  // 1. Process and add the chat history to the prompt array.
+  // Ensure content is always a plain string for history items.
   if (history) {
     history.forEach((msg: Message) => {
-      if (typeof msg.content === 'string') {
+      // Only include user and assistant messages that have string content.
+      if ((msg.role === 'user' || msg.role === 'assistant') && typeof msg.content === 'string') {
         const role = msg.role === 'assistant' ? 'model' : 'user';
-        if (msg.role !== 'error' && msg.role !== 'system') {
-           prompt.push({ role, content: msg.content });
-        }
+        prompt.push({ role, content: msg.content });
       }
     });
   }
 
-  // Add the current user question, including an image if provided
-  const userParts: any[] = [{ text: question }];
+  // 2. Prepare the content for the current user question.
+  const userContent: any[] = [{ text: question }];
   if (fileDataUri) {
-    userParts.unshift({ media: { url: fileDataUri } });
+    // If a file is attached, prepend the media object to the content array.
+    userContent.unshift({ media: { url: fileDataUri } });
   }
-  prompt.push({ role: 'user', content: userParts });
+
+  // 3. Add the current user question to the prompt array.
+  // If there's a file, content will be an array [media, text].
+  // If not, it will be a single-element array [text], which Genkit handles correctly.
+  prompt.push({ role: 'user', content: userContent });
+
 
   const llmResponse = await ai.generate({
     prompt: prompt,
@@ -71,5 +77,3 @@ To explain concepts visually, you can draw simple text-based (ASCII) diagrams in
 
   return llmResponse.text;
 }
-
-    
