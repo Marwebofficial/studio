@@ -5,7 +5,7 @@ import { useState, useRef, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
-import { Bot, User, Send, GraduationCap, MessageSquarePlus, Paperclip, X, Trash, FileText, Loader, Volume2, BookCopy, Square, LogOut, Edit, Shield } from 'lucide-react';
+import { Bot, User, Send, GraduationCap, MessageSquarePlus, Paperclip, X, Trash, FileText, Loader, Volume2, BookCopy, Square, LogOut, Edit, Shield, Code, Play } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import Image from 'next/image';
 import Link from 'next/link';
@@ -16,7 +16,7 @@ import { collection, query, where, orderBy, getDocs, addDoc, serverTimestamp, wr
 import { updateProfile } from 'firebase/auth';
 
 
-import { getAnswer, speak, getImage, getQuiz } from '@/app/actions';
+import { getAnswer, speak, getImage, getQuiz, executeCode } from '@/app/actions';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -71,7 +71,7 @@ import { useTypingEffect } from '@/hooks/use-typing-effect';
 import { QuizView, type QuizData } from '@/components/quiz';
 import { useAuth, useUser, useFirestore, useCollection, useMemoFirebase, useDoc } from '@/firebase';
 import { signOut } from 'firebase/auth';
-import type { Message, Chat } from '@/lib/types';
+import type { Message, Chat, RunCodeOutput } from '@/lib/types';
 import { cn } from '@/lib/utils';
 
 
@@ -81,6 +81,10 @@ const formSchema = z.object({
 
 const updateProfileFormSchema = z.object({
     displayName: z.string().min(2, { message: "Name must be at least 2 characters."}),
+});
+
+const codeFormSchema = z.object({
+    code: z.string().min(1, 'Please enter some code.'),
 });
 
 
@@ -304,11 +308,22 @@ export default function Home() {
   const [profilePic, setProfilePic] = useState<string | null>(null);
   const [isUpdateProfileOpen, setIsUpdateProfileOpen] = useState(false);
   const abortControllerRef = useRef<AbortController | null>(null);
+
+  const [view, setView] = useState<'chat' | 'code'>('chat');
+  const [codeResult, setCodeResult] = useState<RunCodeOutput | null>(null);
+  const [isExecutingCode, setIsExecutingCode] = useState(false);
   
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
     defaultValues: {
       question: '',
+    },
+  });
+
+  const codeForm = useForm<z.infer<typeof codeFormSchema>>({
+    resolver: zodResolver(codeFormSchema),
+    defaultValues: {
+      code: "console.log('Hello, World!');",
     },
   });
 
@@ -388,6 +403,7 @@ export default function Home() {
 
   const handleSelectChat = (chatId: string) => {
     setActiveChatId(chatId);
+    setView('chat');
   }
 
   const handleDeleteChat = async (chatId: string) => {
@@ -650,8 +666,25 @@ const handleProfilePicUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     
     setIsPending(false);
   };
+
+  const onCodeSubmit = async (data: z.infer<typeof codeFormSchema>) => {
+    setIsExecutingCode(true);
+    setCodeResult(null);
+    const { result, error } = await executeCode(data.code);
+    if (error) {
+        toast({
+            variant: 'destructive',
+            title: 'Error Executing Code',
+            description: error,
+        });
+    } else {
+        setCodeResult(result || null);
+    }
+    setIsExecutingCode(false);
+  };
   
   const activeChatTitle = chats?.find(c => c.id === activeChatId)?.title || 'New Conversation';
+  const headerTitle = view === 'code' ? 'Code Editor' : activeChatTitle;
 
   return (
     <>
@@ -720,8 +753,11 @@ const handleProfilePicUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
                     </div>
                 </SidebarHeader>
                 <SidebarContent className="p-2 flex flex-col">
-                    <Button variant="ghost" className="w-full border border-primary/20 justify-start hover:bg-primary/10 hover:text-primary" onClick={handleNewChat}>
-                        <MessageSquarePlus className="mr-2" /> New Chat
+                    <Button variant={view === 'chat' ? 'secondary' : 'ghost'} className="w-full border border-primary/20 justify-start hover:bg-primary/10 hover:text-primary" onClick={() => setView('chat')}>
+                        <MessageSquarePlus className="mr-2" /> Chat
+                    </Button>
+                    <Button variant={view === 'code' ? 'secondary' : 'ghost'} className="w-full border border-primary/20 justify-start hover:bg-primary/10 hover:text-primary mt-2" onClick={() => setView('code')}>
+                        <Code className="mr-2" /> Code Editor
                     </Button>
                     <ScrollArea className="flex-1 my-4">
                     <div className="px-2 space-y-1">
@@ -735,7 +771,7 @@ const handleProfilePicUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
                             <div key={chat.id} className="group relative">
                             <Button
                                 variant="ghost"
-                                className={cn("w-full justify-start truncate pr-8", activeChatId === chat.id && "bg-primary/10 text-primary")}
+                                className={cn("w-full justify-start truncate pr-8", activeChatId === chat.id && view === 'chat' && "bg-primary/10 text-primary")}
                                 onClick={() => handleSelectChat(chat.id)}
                             >
                                 {chat.title}
@@ -784,106 +820,167 @@ const handleProfilePicUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
                     <header className="flex items-center justify-between p-4 border-b border-primary/20 bg-transparent md:pl-0 sticky top-0 z-10">
                         <SidebarTrigger className="md:hidden"/>
                         <h1 className="text-lg font-heading tracking-tight truncate flex-1 text-center font-medium text-primary">
-                            {activeChatTitle}
+                            {headerTitle}
                         </h1>
                         <div className="w-8 md:w-0" />
                     </header>
-                    <div className="flex-1 relative">
-                        <ScrollArea className="h-full" viewportRef={scrollAreaViewportRef}>
-                            <div className="p-4 md:p-6 space-y-8">
-                            {isMessagesLoading && !activeChatId ? (
-                                <LoadingMessage />
-                            ) : (
-                                messages?.map((message, index) => {
-                                if (message.role === 'user') {
-                                    return <UserMessage key={message.id} content={message.content as string} fileDataUri={message.fileDataUri} createdAt={message.createdAt} profilePic={profilePic} />;
-                                }
-                                if (message.role === 'assistant') {
-                                    return <AssistantMessage key={message.id} message={message} isLastMessage={index === messages.length - 1} isPending={isPending} />;
-                                }
-                                if (message.role === 'error') {
-                                    return <ErrorMessage key={message.id} content={message.content as string} />;
-                                }
-                                return null;
-                                })
-                            )}
-                            {isPending && <LoadingMessage />}
-                            </div>
-                        </ScrollArea>
-                        {!messages || messages.length === 0 && !isMessagesLoading && (
-                            <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                                <div className="text-center p-4">
-                                    <div className="inline-block p-4 rounded-full bg-primary/10 border border-primary/20 shadow-lg shadow-primary/10">
-                                        <svg viewBox="0 0 24 24" fill="none" stroke="hsl(var(--primary))" strokeWidth="1.5" className="h-12 w-12"><path d="M3 12h2.5l1.5-3 3 6 3-6 1.5 3H19"/></svg>
-                                    </div>
-                                    <h2 className="mt-6 text-3xl font-heading font-medium tracking-tight">Meet FreeChat</h2>
-                                    <p className="mt-2 text-muted-foreground">The AI Tutor That Learns With You</p>
-                                    <div className="mt-8 grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm max-w-xl mx-auto">
-                                        {examplePrompts.map(prompt => (
-                                            <Button 
-                                                key={prompt} 
-                                                variant="outline" 
-                                                className="text-left justify-start h-auto py-3 px-4 bg-background/50 hover:bg-muted/50 border-input pointer-events-auto"
-                                                onClick={() => form.setValue('question', prompt)}
-                                            >
-                                                {prompt.startsWith('/') ? <span className="text-primary mr-2">{prompt.split(' ')[0]}</span> : null}
-                                                {prompt.startsWith('/') ? prompt.substring(prompt.indexOf(' ') + 1) : prompt}
-                                            </Button>
-                                        ))}
+                    {view === 'chat' ? (
+                        <>
+                        <div className="flex-1 relative">
+                            <ScrollArea className="h-full" viewportRef={scrollAreaViewportRef}>
+                                <div className="p-4 md:p-6 space-y-8">
+                                {isMessagesLoading && !activeChatId ? (
+                                    <LoadingMessage />
+                                ) : (
+                                    messages?.map((message, index) => {
+                                    if (message.role === 'user') {
+                                        return <UserMessage key={message.id} content={message.content as string} fileDataUri={message.fileDataUri} createdAt={message.createdAt} profilePic={profilePic} />;
+                                    }
+                                    if (message.role === 'assistant') {
+                                        return <AssistantMessage key={message.id} message={message} isLastMessage={index === messages.length - 1} isPending={isPending} />;
+                                    }
+                                    if (message.role === 'error') {
+                                        return <ErrorMessage key={message.id} content={message.content as string} />;
+                                    }
+                                    return null;
+                                    })
+                                )}
+                                {isPending && <LoadingMessage />}
+                                </div>
+                            </ScrollArea>
+                            {!messages || messages.length === 0 && !isMessagesLoading && (
+                                <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                                    <div className="text-center p-4">
+                                        <div className="inline-block p-4 rounded-full bg-primary/10 border border-primary/20 shadow-lg shadow-primary/10">
+                                            <svg viewBox="0 0 24 24" fill="none" stroke="hsl(var(--primary))" strokeWidth="1.5" className="h-12 w-12"><path d="M3 12h2.5l1.5-3 3 6 3-6 1.5 3H19"/></svg>
+                                        </div>
+                                        <h2 className="mt-6 text-3xl font-heading font-medium tracking-tight">Meet FreeChat</h2>
+                                        <p className="mt-2 text-muted-foreground">The AI Tutor That Learns With You</p>
+                                        <div className="mt-8 grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm max-w-xl mx-auto">
+                                            {examplePrompts.map(prompt => (
+                                                <Button 
+                                                    key={prompt} 
+                                                    variant="outline" 
+                                                    className="text-left justify-start h-auto py-3 px-4 bg-background/50 hover:bg-muted/50 border-input pointer-events-auto"
+                                                    onClick={() => form.setValue('question', prompt)}
+                                                >
+                                                    {prompt.startsWith('/') ? <span className="text-primary mr-2">{prompt.split(' ')[0]}</span> : null}
+                                                    {prompt.startsWith('/') ? prompt.substring(prompt.indexOf(' ') + 1) : prompt}
+                                                </Button>
+                                            ))}
+                                        </div>
                                     </div>
                                 </div>
-                            </div>
-                        )}
-                    </div>
-
-                    <footer className="p-4 border-t border-primary/20 bg-transparent">
-                    <Form {...form}>
-                        <form onSubmit={form.handleSubmit(onSubmit)} className="relative max-w-4xl mx-auto">
-                            {fileDataUri && (
-                                <div className="absolute bottom-full left-0 mb-2 w-full">
-                                    <div className="p-2 bg-muted rounded-md flex items-center justify-between gap-2 border border-input">
-                                        <div className="flex items-center gap-2 text-sm text-muted-foreground truncate">
-                                            <FileText className="h-4 w-4" />
-                                            <span className="truncate">{fileName}</span>
+                            )}
+                        </div>
+                        <footer className="p-4 border-t border-primary/20 bg-transparent">
+                            <Form {...form}>
+                                <form onSubmit={form.handleSubmit(onSubmit)} className="relative max-w-4xl mx-auto">
+                                    {fileDataUri && (
+                                        <div className="absolute bottom-full left-0 mb-2 w-full">
+                                            <div className="p-2 bg-muted rounded-md flex items-center justify-between gap-2 border border-input">
+                                                <div className="flex items-center gap-2 text-sm text-muted-foreground truncate">
+                                                    <FileText className="h-4 w-4" />
+                                                    <span className="truncate">{fileName}</span>
+                                                </div>
+                                                <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => { setFileDataUri(undefined); setFileName(undefined);}}>
+                                                    <X className="h-4 w-4" />
+                                                </Button>
+                                            </div>
                                         </div>
-                                        <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => { setFileDataUri(undefined); setFileName(undefined);}}>
-                                            <X className="h-4 w-4" />
+                                    )}
+                                    <Textarea
+                                        {...form.register('question')}
+                                        placeholder="Ask anything or type '/' for commands..."
+                                        className="pr-28 bg-input border-input focus-visible:ring-primary/50"
+                                        rows={1}
+                                        onKeyDown={(e) => {
+                                            if (e.key === 'Enter' && !e.shiftKey) {
+                                                e.preventDefault();
+                                                form.handleSubmit(onSubmit)();
+                                            }
+                                        }}
+                                        disabled={isPending}
+                                    />
+                                    <div className="absolute top-1/2 -translate-y-1/2 right-2 flex items-center gap-1">
+                                        <Button 
+                                            type="button" 
+                                            variant="ghost" 
+                                            size="icon"
+                                            onClick={() => fileInputRef.current?.click()}
+                                            disabled={isPending}
+                                            className="text-muted-foreground hover:text-primary"
+                                        >
+                                            <Paperclip />
+                                        </Button>
+                                        <input type="file" ref={fileInputRef} onChange={handleFileUpload} className="hidden" />
+                                        <Button type="submit" size="icon" disabled={isPending || !form.formState.isValid} className="bg-primary text-primary-foreground hover:bg-primary/90 disabled:bg-primary/50">
+                                            <Send />
                                         </Button>
                                     </div>
+                                </form>
+                            </Form>
+                        </footer>
+                        </>
+                    ) : (
+                        <div className="flex-1 flex flex-col p-4 gap-4">
+                            <Form {...codeForm}>
+                                <form onSubmit={codeForm.handleSubmit(onCodeSubmit)} className="flex-1 flex flex-col gap-4">
+                                    <FormField
+                                        control={codeForm.control}
+                                        name="code"
+                                        render={({ field }) => (
+                                            <FormItem className="flex-1 flex flex-col">
+                                                <FormLabel>Code Editor</FormLabel>
+                                                <FormControl>
+                                                    <Textarea
+                                                        placeholder="Enter your code here..."
+                                                        className="flex-1 font-mono bg-input border-input focus-visible:ring-primary/50 resize-none"
+                                                        {...field}
+                                                    />
+                                                </FormControl>
+                                                <FormMessage />
+                                            </FormItem>
+                                        )}
+                                    />
+                                    <Button type="submit" disabled={isExecutingCode} className="w-full md:w-auto md:self-end">
+                                        {isExecutingCode ? <><Loader className="mr-2 animate-spin" />Running...</> : <><Play className="mr-2" />Run Code</>}
+                                    </Button>
+                                </form>
+                            </Form>
+                            <div className="h-[40%] flex flex-col border border-primary/20 rounded-lg bg-background/50">
+                                <div className="p-3 border-b border-primary/20">
+                                    <h3 className="font-semibold font-heading">Console</h3>
                                 </div>
-                            )}
-                            <Textarea
-                                {...form.register('question')}
-                                placeholder="Ask anything or type '/' for commands..."
-                                className="pr-28 bg-input border-input focus-visible:ring-primary/50"
-                                rows={1}
-                                onKeyDown={(e) => {
-                                    if (e.key === 'Enter' && !e.shiftKey) {
-                                        e.preventDefault();
-                                        form.handleSubmit(onSubmit)();
-                                    }
-                                }}
-                                disabled={isPending}
-                            />
-                            <div className="absolute top-1/2 -translate-y-1/2 right-2 flex items-center gap-1">
-                                <Button 
-                                    type="button" 
-                                    variant="ghost" 
-                                    size="icon"
-                                    onClick={() => fileInputRef.current?.click()}
-                                    disabled={isPending}
-                                    className="text-muted-foreground hover:text-primary"
-                                >
-                                    <Paperclip />
-                                </Button>
-                                <input type="file" ref={fileInputRef} onChange={handleFileUpload} className="hidden" />
-                                <Button type="submit" size="icon" disabled={isPending || !form.formState.isValid} className="bg-primary text-primary-foreground hover:bg-primary/90 disabled:bg-primary/50">
-                                    <Send />
-                                </Button>
+                                <ScrollArea className="flex-1">
+                                    <div className="p-4 space-y-4">
+                                        {isExecutingCode && (
+                                            <div className="space-y-2">
+                                                <Skeleton className="h-4 w-1/3" />
+                                                <Skeleton className="h-4 w-1/2" />
+                                            </div>
+                                        )}
+                                        {codeResult ? (
+                                            <div className="space-y-4">
+                                                <div>
+                                                    <h4 className="font-semibold text-primary">Output:</h4>
+                                                    <pre className="mt-1 bg-muted p-3 rounded-md text-sm font-mono whitespace-pre-wrap">{codeResult.output || 'No output.'}</pre>
+                                                </div>
+                                                <div>
+                                                    <h4 className="font-semibold text-primary">Explanation:</h4>
+                                                    <div className="prose prose-sm prose-invert max-w-none text-foreground mt-1">
+                                                        <ReactMarkdown>{codeResult.explanation}</ReactMarkdown>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        ) : (
+                                            !isExecutingCode && <p className="text-sm text-muted-foreground">Output and explanation will appear here after running the code.</p>
+                                        )}
+                                    </div>
+                                </ScrollArea>
                             </div>
-                        </form>
-                    </Form>
-                    </footer>
+                        </div>
+                    )}
                 </main>
             </div>
         </div>
@@ -891,7 +988,3 @@ const handleProfilePicUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     </>
   );
 }
-
-    
-
-    
