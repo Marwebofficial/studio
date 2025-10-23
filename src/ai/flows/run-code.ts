@@ -20,9 +20,11 @@ const runCodeFlow = ai.defineFlow(
     outputSchema: RunCodeOutputSchema,
   },
   async ({ code }) => {
-    const prompt = `You are a code interpreter and programming tutor. Analyze the following code snippet.
-Provide the simulated output as if it were run in a console.
-Then, provide a clear, step-by-step explanation of the code's functionality, syntax, and any important programming concepts demonstrated.
+    const prompt = `You are an expert code interpreter and programming tutor supporting multiple languages including JavaScript, Python, C++, HTML, and CSS. Analyze the following code snippet.
+
+- For languages like JavaScript, Python, and C++, provide the simulated console output.
+- For HTML/CSS, describe the visual output that would be rendered in a browser.
+- After providing the output, give a clear, step-by-step explanation of the code's functionality, syntax, and key concepts.
 
 Code to analyze:
 \`\`\`
