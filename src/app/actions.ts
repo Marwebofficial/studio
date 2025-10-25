@@ -21,6 +21,9 @@ import {
     runCode,
 } from '@/ai/flows/run-code';
 import type { Message, RunCodeInput, RunCodeOutput } from '@/lib/types';
+import { initializeFirebase } from '@/firebase';
+import { collection, query, where, getDocs, addDoc, serverTimestamp, limit } from 'firebase/firestore';
+
 
 export async function getAnswer(
   question: string,
@@ -29,11 +32,35 @@ export async function getAnswer(
   signal: AbortSignal
 ): Promise<{ answer: string; error?: string }> {
   try {
+    // Caching is only applied to questions without images or chat history for simplicity.
+    if (!fileDataUri && history.length === 0) {
+        const { firestore } = initializeFirebase();
+        const cacheRef = collection(firestore, 'cached_responses');
+        const q = query(cacheRef, where("question", "==", question), limit(1));
+        const cacheSnapshot = await getDocs(q);
+
+        if (!cacheSnapshot.empty) {
+            const cachedDoc = cacheSnapshot.docs[0];
+            return { answer: cachedDoc.data().answer };
+        }
+    }
+
     const input: GenerateAnswerInput = { question, history };
     if (fileDataUri) {
         input.fileDataUri = fileDataUri;
     }
     const answer = await generateAnswer(input, signal);
+
+    if (!fileDataUri && history.length === 0) {
+        const { firestore } = initializeFirebase();
+        const cacheRef = collection(firestore, 'cached_responses');
+        await addDoc(cacheRef, {
+            question: question,
+            answer: answer,
+            createdAt: serverTimestamp(),
+        });
+    }
+
     return { answer };
   } catch (e: any) {
     console.error(e);
