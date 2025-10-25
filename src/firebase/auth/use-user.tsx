@@ -29,5 +29,3 @@ export const useUser = (): UserHookResult => {
 
   return { user, isAdmin, isUserLoading, userError };
 };
-
-    

@@ -273,12 +273,6 @@ export default function Home() {
   const firestore = useFirestore();
   const { user, isAdmin, isUserLoading } = useUser();
 
-  const userDocRef = useMemoFirebase(() => {
-    if (!user) return null;
-    return doc(firestore, 'users', user.uid);
-  }, [user, firestore]);
-  const { data: userData } = useDoc(userDocRef);
-
   const [activeChatId, setActiveChatId] = useState<string | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [isMessagesLoading, setIsMessagesLoading] = useState(false);
@@ -325,6 +319,9 @@ export default function Home() {
     if (user && user.displayName) {
         updateProfileForm.setValue('displayName', user.displayName);
     }
+    if (user && user.photoURL) {
+        setProfilePic(user.photoURL);
+    }
   }, [user, updateProfileForm]);
 
   useEffect(() => {
@@ -342,15 +339,6 @@ export default function Home() {
       });
     }
   }, [messages, isPending]);
-
-  useEffect(() => {
-    if (userData?.photoURL) {
-      setProfilePic(userData.photoURL);
-    } else if (user?.photoURL) {
-      setProfilePic(user.photoURL);
-    }
-  }, [user, userData]);
-
 
   const chatsQuery = useMemoFirebase(() => {
     if (!user) return null;
@@ -448,7 +436,7 @@ export default function Home() {
 
 const handleProfilePicUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file) {
+    if (file && user) {
         if (file.size > 2 * 1024 * 1024) { // 2MB limit
             toast({
                 variant: 'destructive',
@@ -460,11 +448,21 @@ const handleProfilePicUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
         const reader = new FileReader();
         reader.onload = (loadEvent) => {
             const newProfilePic = loadEvent.target?.result as string;
+            // The data URL can be very long and might exceed Firebase Auth limits
+            // It's better to upload the file to Firebase Storage and get a URL,
+            // but for simplicity, we'll optimistically update the local state.
+            // A real app should use Firebase Storage for this.
             setProfilePic(newProfilePic);
-            if (user) {
-                // We only update firestore, as firebase auth has a length limit for photoURL
-                updateDoc(doc(firestore, 'users', user.uid), { photoURL: newProfilePic });
-            }
+            updateProfile(user, { photoURL: newProfilePic }).catch((error) => {
+                console.error("Error updating profile picture in Auth:", error);
+                toast({
+                    variant: 'destructive',
+                    title: 'Update Failed',
+                    description: 'Could not update your profile picture. The file might be too large.',
+                });
+                // Revert optimistic update
+                setProfilePic(user.photoURL);
+            });
         };
         reader.readAsDataURL(file);
     }
