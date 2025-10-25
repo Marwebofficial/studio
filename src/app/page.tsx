@@ -152,7 +152,7 @@ const AssistantMessage = ({ message, isLastMessage, isPending }: { message: Mess
     const content = message.content;
     const isStringContent = typeof content === 'string';
     const isTypingDisabled = !isLastMessage || !!message.quiz || isPending;
-    const displayedContent = useTypingEffect(isStringContent ? content : '', isTypingDisabled ? 0 : 10, isTypingDisabled);
+    const displayedContent = useTypingEffect(isStringContent ? content : '', isTypingDisabled ? 0 : 5, isTypingDisabled);
 
     
     const isTyping = isLastMessage && isStringContent && displayedContent.length < content.length && !isPending;
