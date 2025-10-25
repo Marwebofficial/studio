@@ -67,7 +67,6 @@ import {
   SidebarFooter
 } from '@/components/ui/sidebar';
 import { Skeleton } from '@/components/ui/skeleton';
-import { useTypingEffect } from '@/hooks/use-typing-effect';
 import { QuizView, type QuizData } from '@/components/quiz';
 import { useAuth, useUser, useFirestore, useCollection, useMemoFirebase, useDoc } from '@/firebase';
 import { signOut } from 'firebase/auth';
@@ -144,17 +143,13 @@ const UserMessage = ({ content, fileDataUri, createdAt, profilePic }: { content:
 }
   
 
-const AssistantMessage = ({ message, isLastMessage, isPending }: { message: Message, isLastMessage: boolean, isPending: boolean }) => {
+const AssistantMessage = ({ message }: { message: Message }) => {
     const [audio, setAudio] = useState<HTMLAudioElement | null>(null);
     const [isPlaying, setIsPlaying] = useState(false);
     const [isGenerating, setIsGenerating] = useState(false);
     
     const content = message.content;
     const isStringContent = typeof content === 'string';
-    const isTypingDisabled = !isLastMessage || !!message.quiz || isPending;
-    const displayedContent = useTypingEffect(isStringContent ? content : '', 5, isTypingDisabled);
-    
-    const isTyping = isLastMessage && isStringContent && displayedContent.length < content.length && !isPending;
 
     const handleSpeak = async () => {
         if (typeof content !== 'string' || content.length === 0) return;
@@ -193,7 +188,7 @@ const AssistantMessage = ({ message, isLastMessage, isPending }: { message: Mess
     if (message.quiz) {
       renderContent = <QuizView quiz={message.quiz} />;
     } else if (isStringContent) {
-      renderContent = <ReactMarkdown remarkPlugins={[[remarkMath, {singleDollarTextMath: true}]]} rehypePlugins={[rehypeKatex]}>{displayedContent as string}</ReactMarkdown>;
+      renderContent = <ReactMarkdown remarkPlugins={[[remarkMath, {singleDollarTextMath: true}]]} rehypePlugins={[rehypeKatex]}>{content}</ReactMarkdown>;
     } else {
       renderContent = message.content;
     }
@@ -212,15 +207,6 @@ const AssistantMessage = ({ message, isLastMessage, isPending }: { message: Mess
                       {renderContent}
                   </div>
                   <div className="absolute bottom-1 right-1 flex items-center">
-                    {isTyping && (
-                      <Button 
-                          size="icon" 
-                          variant="ghost"
-                          className="h-7 w-7 text-secondary"
-                      >
-                          <Square className="h-4 w-4 animate-pulse" />
-                      </Button>
-                    )}
                     {isStringContent && (content as string).length > 0 && !message.quiz && (
                       <Button 
                           size="icon" 
@@ -836,7 +822,7 @@ const handleProfilePicUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
                                         return <UserMessage key={message.id} content={message.content as string} fileDataUri={message.fileDataUri} createdAt={message.createdAt} profilePic={profilePic} />;
                                     }
                                     if (message.role === 'assistant') {
-                                        return <AssistantMessage key={message.id} message={message} isLastMessage={index === messages.length - 1} isPending={isPending} />;
+                                        return <AssistantMessage key={message.id} message={message} />;
                                     }
                                     if (message.role === 'error') {
                                         return <ErrorMessage key={message.id} content={message.content as string} />;
@@ -987,5 +973,3 @@ const handleProfilePicUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     </>
   );
 }
-
-    
