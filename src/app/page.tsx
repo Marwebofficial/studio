@@ -272,6 +272,9 @@ export default function Home() {
   const auth = useAuth();
   const firestore = useFirestore();
   const { user, isAdmin, isUserLoading } = useUser();
+  const { data: userData } = useDoc<any>(
+    useMemoFirebase(() => (user ? doc(firestore, 'users', user.uid) : null), [user, firestore])
+  );
 
   const [activeChatId, setActiveChatId] = useState<string | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
@@ -319,10 +322,13 @@ export default function Home() {
     if (user && user.displayName) {
         updateProfileForm.setValue('displayName', user.displayName);
     }
-    if (user && user.photoURL) {
+    // Set profile picture from auth object first, then try Firestore document
+    if (user?.photoURL) {
         setProfilePic(user.photoURL);
+    } else if (userData?.photoURL) {
+        setProfilePic(userData.photoURL);
     }
-  }, [user, updateProfileForm]);
+  }, [user, userData, updateProfileForm]);
 
   useEffect(() => {
     if (user && !user.displayName && !isUserLoading && !isUpdateProfileOpen) {
@@ -448,20 +454,13 @@ const handleProfilePicUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
         const reader = new FileReader();
         reader.onload = (loadEvent) => {
             const newProfilePic = loadEvent.target?.result as string;
-            // The data URL can be very long and might exceed Firebase Auth limits
-            // It's better to upload the file to Firebase Storage and get a URL,
-            // but for simplicity, we'll optimistically update the local state.
-            // A real app should use Firebase Storage for this.
+            // Optimistically update local state.
+            // DO NOT save to Auth or Firestore, as the data URI is too large.
+            // This means the photo will not persist across sessions.
             setProfilePic(newProfilePic);
-            updateProfile(user, { photoURL: newProfilePic }).catch((error) => {
-                console.error("Error updating profile picture in Auth:", error);
-                toast({
-                    variant: 'destructive',
-                    title: 'Update Failed',
-                    description: 'Could not update your profile picture. The file might be too large.',
-                });
-                // Revert optimistic update
-                setProfilePic(user.photoURL);
+            toast({
+                title: 'Profile Picture Updated',
+                description: 'Your new photo is set for this session.',
             });
         };
         reader.readAsDataURL(file);
