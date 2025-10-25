@@ -12,6 +12,8 @@
 import {ai} from '@/ai/genkit';
 import {z} from 'genkit';
 import type { Message } from '@/lib/types';
+import { getFirestore } from 'firebase-admin/firestore';
+import { adminApp } from '@/lib/firebase-admin';
 
 const GenerateAnswerInputSchema = z.object({
   question: z.string().describe('The question to answer.'),
@@ -22,27 +24,46 @@ export type GenerateAnswerInput = z.infer<
   typeof GenerateAnswerInputSchema
 >;
 
+// Initialize Firestore using the admin app
+const db = getFirestore(adminApp);
+const cacheCollection = db.collection('cached_responses');
+
 export async function generateAnswer(
   input: GenerateAnswerInput,
   signal: AbortSignal
 ): Promise<string> {
   const { question, fileDataUri, history } = input;
 
-  // 1. Prepare the content for the current user question.
-  // The content must be an array of Parts.
+  // Do not cache conversations with file uploads or history for now.
+  if (!fileDataUri && (!history || history.length === 0)) {
+    // 1. Check cache for an existing answer.
+    try {
+        const snapshot = await cacheCollection.where('question', '==', question).limit(1).get();
+        if (!snapshot.empty) {
+            const cachedDoc = snapshot.docs[0];
+            const cachedData = cachedDoc.data();
+            if (cachedData && cachedData.answer) {
+                console.log('Returning cached response for:', question);
+                return cachedData.answer;
+            }
+        }
+    } catch (e) {
+        console.error("Error reading from cache:", e);
+        // If there's an error, proceed to generate a new answer.
+    }
+  }
+
+
+  // 2. Prepare the content for the current user question.
   const userContent: any[] = [];
   
   if (fileDataUri) {
-    // If a file is attached, add the media part first.
     userContent.push({ media: { url: fileDataUri } });
   }
-
-  // Add the text part of the user's question.
   userContent.push({ text: question });
 
-  // 2. Process and map the chat history to the format expected by Genkit's `history` option.
+  // 3. Process and map the chat history.
   const processedHistory = history?.map((msg: Message) => {
-    // Only include user and assistant messages that have string content.
     if ((msg.role === 'user' || msg.role === 'assistant') && typeof msg.content === 'string') {
       const role = msg.role === 'assistant' ? 'model' : 'user';
       return { role, content: [{ text: msg.content }] };
@@ -51,9 +72,10 @@ export async function generateAnswer(
   }).filter(Boolean); // Filter out any null entries
 
 
+  // 4. Generate the answer using the AI model.
   const llmResponse = await ai.generate({
-    prompt: userContent, // The prompt is now just the current user message
-    history: processedHistory, // The history is passed as a separate option
+    prompt: userContent,
+    history: processedHistory,
     model: 'googleai/gemini-2.5-flash',
     system: `You are a helpful AI assistant named freechat tutor. You are an expert exam writing tutor and a mathematics genius. You can provide practice questions, grade answers, give feedback on writing style, explain complex concepts, and offer exam strategies. You can also answer general questions on any topic.
 
@@ -66,11 +88,29 @@ To explain concepts visually, you can draw simple text-based (ASCII) diagrams in
    +----------+
    |  Box A   |
    +----------+
-\`\`\``,
+\`\`\`
+`,
     output: {
       format: 'text',
     },
   }, { signal });
 
-  return llmResponse.text;
+  const answer = llmResponse.text;
+
+  // 5. Cache the new response if it's for a simple question.
+  if (answer && !fileDataUri && (!history || history.length === 0)) {
+      try {
+          await cacheCollection.add({
+              question: question,
+              answer: answer,
+              createdAt: new Date(),
+          });
+          console.log('Cached new response for:', question);
+      } catch (e) {
+          console.error("Error writing to cache:", e);
+      }
+  }
+
+
+  return answer;
 }
