@@ -14,7 +14,7 @@ import { signOut } from 'firebase/auth';
 import type { Message, Chat, RunCodeOutput } from '@/lib/types';
 import { getAnswer, executeCode, getImage, getQuiz } from '@/app/actions';
 
-import { SidebarProvider, Sidebar, SidebarTrigger } from '@/components/ui/sidebar';
+import { SidebarProvider } from '@/components/ui/sidebar';
 import { ChatSidebar } from '@/components/chat/ChatSidebar';
 import { MainHeader } from '@/components/chat/MainHeader';
 import { ChatView } from '@/components/chat/ChatView';
@@ -62,10 +62,12 @@ export default function Home() {
     if (user && user.displayName) {
         updateProfileForm.setValue('displayName', user.displayName);
     }
-    if (user?.photoURL) {
-        setProfilePic(user.photoURL);
+    // Prioritize auth user photoURL, but allow local state to override for session preview
+    if (user?.photoURL && !profilePic) {
+      setProfilePic(user.photoURL);
     }
-  }, [user, userData, updateProfileForm]);
+  }, [user, userData, updateProfileForm, profilePic]);
+
 
   useEffect(() => {
     if (user && !user.displayName && !isUserLoading && !isUpdateProfileOpen) {
@@ -187,8 +189,9 @@ export default function Home() {
   const onUpdateProfileSubmit = async (values: z.infer<typeof updateProfileFormSchema>) => {
     if (!user) return;
     try {
-        const userDocRef = doc(firestore, 'users', user.uid);
         await updateProfile(user, { displayName: values.displayName });
+        
+        const userDocRef = doc(firestore, 'users', user.uid);
         await updateDoc(userDocRef, { displayName: values.displayName });
 
         toast({
@@ -323,11 +326,18 @@ export default function Home() {
     setIsPending(true);
     
     const historyForAI = messagesWithUser.slice(0, -1).map(msg => {
-      const sanitizedMsg = { ...msg };
-      if (sanitizedMsg.createdAt && typeof sanitizedMsg.createdAt.toDate === 'function') {
-        sanitizedMsg.createdAt = (sanitizedMsg.createdAt as Timestamp).toDate().toISOString();
+      // Create a clean, serializable object for the history
+      const cleanMsg: Message = {
+        id: msg.id,
+        role: msg.role,
+        content: msg.content,
+      };
+      if (msg.createdAt && typeof msg.createdAt.toDate === 'function') {
+        cleanMsg.createdAt = (msg.createdAt as Timestamp).toDate().toISOString();
+      } else if (msg.createdAt) {
+        cleanMsg.createdAt = msg.createdAt;
       }
-      return sanitizedMsg;
+      return cleanMsg;
     });
 
     abortControllerRef.current = new AbortController();
@@ -387,6 +397,7 @@ export default function Home() {
                     chats={chats}
                     activeChatId={activeChatId}
                     view={view}
+                    onNewChat={handleNewChat}
                     setView={setView}
                     handleSelectChat={handleSelectChat}
                     handleDeleteChat={handleDeleteChat}
@@ -416,5 +427,3 @@ export default function Home() {
     </>
   );
 }
-
-    

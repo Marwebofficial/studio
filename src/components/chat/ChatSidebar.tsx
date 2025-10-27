@@ -3,7 +3,7 @@
 
 import Link from 'next/link';
 import { useRef } from 'react';
-import { MessageSquarePlus, Code, User, Edit, Shield, LogOut, Trash } from 'lucide-react';
+import { MessageSquarePlus, Code, User, Edit, Shield, LogOut, Trash, PlusCircle } from 'lucide-react';
 import {
   Sidebar,
   SidebarHeader,
@@ -32,6 +32,7 @@ interface ChatSidebarProps {
     handleLogout: () => void;
     onProfilePicChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
     onUpdateProfileClick: () => void;
+    onNewChat: () => void;
 }
 
 export function ChatSidebar({
@@ -48,19 +49,23 @@ export function ChatSidebar({
     handleLogout,
     onProfilePicChange,
     onUpdateProfileClick,
+    onNewChat,
 }: ChatSidebarProps) {
     const profilePicInputRef = useRef<HTMLInputElement>(null);
 
     return (
         <Sidebar className="border-r border-primary/20 bg-transparent">
             <SidebarHeader>
-                <div className="flex items-center gap-2 p-2">
+                <div className="flex items-center justify-between gap-2 p-2">
                     <Link href="/" className="flex items-center gap-2 group">
                         <div className="p-1.5 rounded-lg bg-primary/10 border border-primary/20 group-hover:bg-primary/20 transition-colors">
                             <svg viewBox="0 0 24 24" fill="none" stroke="hsl(var(--primary))" strokeWidth="2" className="h-5 w-5"><path d="M3 12h2.5l1.5-3 3 6 3-6 1.5 3H19"/></svg>
                         </div>
                         <h2 className="text-lg font-heading tracking-tight font-medium">FreeChat</h2>
                     </Link>
+                    <Button variant="ghost" size="icon" className="h-8 w-8" onClick={onNewChat}>
+                        <PlusCircle className="h-5 w-5 text-primary" />
+                    </Button>
                 </div>
             </SidebarHeader>
             <SidebarContent className="p-2 flex flex-col">
@@ -128,5 +133,3 @@ export function ChatSidebar({
         </Sidebar>
     );
 }
-
-    
