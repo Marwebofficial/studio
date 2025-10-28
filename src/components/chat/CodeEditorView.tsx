@@ -27,6 +27,8 @@ interface LogEntry {
 }
 
 export function CodeEditorView() {
+    const [activeTab, setActiveTab] = useState('js');
+    const [outputType, setOutputType] = useState<'js' | 'html'>('js');
     const [logs, setLogs] = useState<LogEntry[]>([]);
     const [htmlOutput, setHtmlOutput] = useState('');
     const { dialog, requestDialog, resolveDialog } = useDialogs();
@@ -102,6 +104,8 @@ run();
 
     const handleJsSubmit = async (data: z.infer<typeof jsFormSchema>) => {
         setLogs([]);
+        setOutputType('js');
+        setActiveTab('output');
 
         const capturedLogs: LogEntry[] = [];
         const originalConsole = { ...console };
@@ -134,15 +138,18 @@ run();
     
     const handleHtmlSubmit = (data: z.infer<typeof htmlFormSchema>) => {
         setHtmlOutput(data.code);
+        setOutputType('html');
+        setActiveTab('output');
     };
 
     return (
         <div className="flex-1 flex flex-col p-4 gap-4">
             <JSDialogs dialog={dialog} onResolve={resolveDialog} />
-            <Tabs defaultValue="js" className="flex-1 flex flex-col">
-                <TabsList className="grid w-full grid-cols-2">
+            <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col">
+                <TabsList className="grid w-full grid-cols-3">
                     <TabsTrigger value="js">JavaScript</TabsTrigger>
                     <TabsTrigger value="html">HTML/CSS</TabsTrigger>
+                    <TabsTrigger value="output">Output</TabsTrigger>
                 </TabsList>
                 <TabsContent value="js" className="flex-1 flex flex-col gap-4 mt-2">
                     <Form {...jsForm}>
@@ -169,24 +176,6 @@ run();
                             </Button>
                         </form>
                     </Form>
-                    <div className="h-[40%] flex flex-col border border-primary/20 rounded-lg bg-background/50">
-                        <div className="p-3 border-b border-primary/20">
-                            <h3 className="font-semibold font-heading">Console</h3>
-                        </div>
-                        <ScrollArea className="flex-1">
-                            <div className="p-4 font-mono text-sm">
-                                {logs.length === 0 && <p className="text-muted-foreground">Console output will appear here.</p>}
-                                {logs.map((log, index) => (
-                                    <div key={index} className={`whitespace-pre-wrap ${
-                                        log.type === 'error' ? 'text-destructive' : 
-                                        log.type === 'warn' ? 'text-yellow-500' : ''
-                                    }`}>
-                                        {log.message}
-                                    </div>
-                                ))}
-                            </div>
-                        </ScrollArea>
-                    </div>
                 </TabsContent>
                 <TabsContent value="html" className="flex-1 flex flex-col gap-4 mt-2">
                     <Form {...htmlForm}>
@@ -213,23 +202,39 @@ run();
                             </Button>
                         </form>
                     </Form>
-                     <div className="h-[40%] flex flex-col border border-primary/20 rounded-lg bg-background/50">
+                </TabsContent>
+                <TabsContent value="output" className="flex-1 flex flex-col gap-4 mt-2">
+                     <div className="flex-1 flex flex-col border border-primary/20 rounded-lg bg-background/50">
                         <div className="p-3 border-b border-primary/20">
-                            <h3 className="font-semibold font-heading">Output</h3>
+                            <h3 className="font-semibold font-heading">{outputType === 'js' ? 'Console' : 'Rendered HTML'}</h3>
                         </div>
-                        <div className="flex-1 relative">
-                           <iframe
-                                srcDoc={htmlOutput}
-                                title="HTML Output"
-                                sandbox="allow-scripts"
-                                className="w-full h-full bg-white"
-                           />
-                        </div>
+                        {outputType === 'js' ? (
+                            <ScrollArea className="flex-1">
+                                <div className="p-4 font-mono text-sm">
+                                    {logs.length === 0 && <p className="text-muted-foreground">Console output will appear here.</p>}
+                                    {logs.map((log, index) => (
+                                        <div key={index} className={`whitespace-pre-wrap ${
+                                            log.type === 'error' ? 'text-destructive' : 
+                                            log.type === 'warn' ? 'text-yellow-500' : ''
+                                        }`}>
+                                            {log.message}
+                                        </div>
+                                    ))}
+                                </div>
+                            </ScrollArea>
+                        ) : (
+                            <div className="flex-1 relative">
+                               <iframe
+                                    srcDoc={htmlOutput}
+                                    title="HTML Output"
+                                    sandbox="allow-scripts"
+                                    className="w-full h-full bg-white"
+                               />
+                            </div>
+                        )}
                     </div>
                 </TabsContent>
             </Tabs>
         </div>
     );
 }
-
-    
