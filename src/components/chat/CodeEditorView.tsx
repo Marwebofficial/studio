@@ -72,6 +72,7 @@ run();
             justify-content: center;
             align-items: center;
             height: 90%;
+            margin: 0;
         }
         .container {
             text-align: center;
@@ -88,7 +89,8 @@ run();
 <body>
     <div class="container">
         <h1>Hello, World!</h1>
-        <p>This is a sample HTML page.</p>
+        <p>This is a sample HTML page rendered in an iframe.</p>
+        <button onclick="alert('It works!')">Click me</button>
     </div>
 </body>
 </html>
@@ -99,7 +101,7 @@ run();
     useEffect(() => {
         // Set initial HTML output on component mount
         setHtmlOutput(htmlForm.getValues('code'));
-    }, [htmlForm]);
+    }, []);
 
 
     const handleJsSubmit = async (data: z.infer<typeof jsFormSchema>) => {
@@ -126,9 +128,11 @@ run();
         };
 
         try {
-            const executeCode = new Function('alert', 'confirm', 'prompt', `return (async () => { ${data.code} })();`);
+             // We use an async function wrapper to allow top-level await for our custom dialogs.
+            const executeCode = new Function('alert', 'confirm', 'prompt', `return (async () => { try { ${data.code} } catch(e) { console.error(e); } })();`);
             await executeCode(alert, confirm, prompt);
         } catch (error: any) {
+            // This outer try-catch handles syntax errors in the user's code itself.
             console.error(error);
         } finally {
             Object.assign(console, originalConsole);
@@ -143,9 +147,9 @@ run();
     };
 
     return (
-        <div className="flex-1 flex flex-col p-4 gap-4">
+        <div className="flex-1 flex flex-col p-4 gap-4 h-full">
             <JSDialogs dialog={dialog} onResolve={resolveDialog} />
-            <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col">
+            <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col h-full">
                 <TabsList className="grid w-full grid-cols-3">
                     <TabsTrigger value="js">JavaScript</TabsTrigger>
                     <TabsTrigger value="html">HTML/CSS</TabsTrigger>
@@ -159,11 +163,11 @@ run();
                                 name="code"
                                 render={({ field }) => (
                                     <FormItem className="flex-1 flex flex-col">
-                                        <FormLabel>JavaScript Editor</FormLabel>
+                                        <FormLabel className="sr-only">JavaScript Editor</FormLabel>
                                         <FormControl>
                                             <Textarea
                                                 placeholder="Enter your JavaScript code here. Use await for prompt() and confirm()."
-                                                className="flex-1 font-mono bg-input border-input focus-visible:ring-primary/50 resize-none"
+                                                className="h-full font-mono bg-input border-input focus-visible:ring-primary/50 resize-none"
                                                 {...field}
                                             />
                                         </FormControl>
@@ -185,11 +189,11 @@ run();
                                 name="code"
                                 render={({ field }) => (
                                     <FormItem className="flex-1 flex flex-col">
-                                        <FormLabel>HTML/CSS Editor</FormLabel>
+                                        <FormLabel className="sr-only">HTML/CSS Editor</FormLabel>
                                         <FormControl>
                                             <Textarea
                                                 placeholder="Enter your HTML and CSS code here."
-                                                className="flex-1 font-mono bg-input border-input focus-visible:ring-primary/50 resize-none"
+                                                className="h-full font-mono bg-input border-input focus-visible:ring-primary/50 resize-none"
                                                 {...field}
                                             />
                                         </FormControl>
@@ -203,8 +207,8 @@ run();
                         </form>
                     </Form>
                 </TabsContent>
-                <TabsContent value="output" className="flex-1 flex flex-col gap-4 mt-2">
-                     <div className="flex-1 flex flex-col border border-primary/20 rounded-lg bg-background/50">
+                <TabsContent value="output" className="flex-1 flex flex-col mt-2 h-full">
+                     <div className="flex-1 flex flex-col border border-primary/20 rounded-lg bg-background/50 h-full">
                         <div className="p-3 border-b border-primary/20">
                             <h3 className="font-semibold font-heading">{outputType === 'js' ? 'Console' : 'Rendered HTML'}</h3>
                         </div>
@@ -223,11 +227,11 @@ run();
                                 </div>
                             </ScrollArea>
                         ) : (
-                            <div className="flex-1 relative">
+                            <div className="flex-1 relative h-full">
                                <iframe
                                     srcDoc={htmlOutput}
                                     title="HTML Output"
-                                    sandbox="allow-scripts"
+                                    sandbox="allow-scripts allow-modals"
                                     className="w-full h-full bg-white"
                                />
                             </div>
@@ -238,3 +242,5 @@ run();
         </div>
     );
 }
+
+    
