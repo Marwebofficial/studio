@@ -196,7 +196,7 @@ fibonacci(10)
         switch (outputType) {
             case 'js':
                 return (
-                    <ScrollArea className="flex-1">
+                    <ScrollArea className="h-full">
                         <div className="p-4 font-mono text-sm">
                             {jsLogs.length === 0 && <p className="text-muted-foreground">Console output will appear here.</p>}
                             {jsLogs.map((log, index) => (
@@ -221,7 +221,7 @@ fibonacci(10)
                 );
             case 'ai':
                 return (
-                    <ScrollArea className="flex-1">
+                    <ScrollArea className="h-full">
                         <div className="p-4 space-y-6">
                             {isAiPending && (
                                 <div className="space-y-4">
@@ -271,9 +271,9 @@ fibonacci(10)
                     <TabsTrigger value="output">Output</TabsTrigger>
                 </TabsList>
 
-                <TabsContent value="js" className="flex-1 flex flex-col gap-4 mt-2 h-full overflow-hidden">
+                <TabsContent value="js" className="flex-1 mt-2 h-full overflow-hidden">
                     <Form {...jsForm}>
-                        <form onSubmit={jsForm.handleSubmit(handleJsSubmit)} className="flex-1 flex flex-col gap-4 h-full">
+                        <form onSubmit={jsForm.handleSubmit(handleJsSubmit)} className="flex flex-col gap-4 h-full">
                             <FormField
                                 control={jsForm.control}
                                 name="code"
@@ -298,9 +298,9 @@ fibonacci(10)
                     </Form>
                 </TabsContent>
                 
-                <TabsContent value="html" className="flex-1 flex flex-col gap-4 mt-2 h-full overflow-hidden">
+                <TabsContent value="html" className="flex-1 mt-2 h-full overflow-hidden">
                     <Form {...htmlForm}>
-                        <form onSubmit={htmlForm.handleSubmit(handleHtmlSubmit)} className="flex-1 flex flex-col gap-4 h-full">
+                        <form onSubmit={htmlForm.handleSubmit(handleHtmlSubmit)} className="flex flex-col gap-4 h-full">
                             <FormField
                                 control={htmlForm.control}
                                 name="code"
@@ -325,9 +325,9 @@ fibonacci(10)
                     </Form>
                 </TabsContent>
 
-                <TabsContent value="python" className="flex-1 flex flex-col gap-4 mt-2 h-full overflow-hidden">
+                <TabsContent value="python" className="flex-1 mt-2 h-full overflow-hidden">
                     <Form {...pythonForm}>
-                        <form onSubmit={pythonForm.handleSubmit(handlePythonSubmit)} className="flex-1 flex flex-col gap-4 h-full">
+                        <form onSubmit={pythonForm.handleSubmit(handlePythonSubmit)} className="flex flex-col gap-4 h-full">
                             <FormField
                                 control={pythonForm.control}
                                 name="code"
@@ -353,8 +353,8 @@ fibonacci(10)
                     </Form>
                 </TabsContent>
 
-                <TabsContent value="output" className="flex-1 flex flex-col mt-2 h-full overflow-hidden">
-                     <div className="flex-1 flex flex-col border border-primary/20 rounded-lg bg-background/50 h-full">
+                <TabsContent value="output" className="flex-1 mt-2 h-full overflow-hidden">
+                     <div className="flex flex-col border border-primary/20 rounded-lg bg-background/50 h-full">
                         <div className="p-3 border-b border-primary/20">
                             <h3 className="font-semibold font-heading">
                                 {outputType === 'js' && 'Console'}
@@ -362,7 +362,9 @@ fibonacci(10)
                                 {outputType === 'ai' && 'AI Analysis'}
                             </h3>
                         </div>
-                        {renderOutput()}
+                        <div className="flex-1 h-full">
+                            {renderOutput()}
+                        </div>
                     </div>
                 </TabsContent>
             </Tabs>
