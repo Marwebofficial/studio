@@ -4,8 +4,6 @@
 import { useState, useEffect, useRef } from 'react';
 import {
   AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
   AlertDialogContent,
   AlertDialogDescription,
   AlertDialogFooter,
@@ -14,6 +12,7 @@ import {
 } from '@/components/ui/alert-dialog';
 import { Input } from '@/components/ui/input';
 import { Button } from '../ui/button';
+import { AlertDialogCancel } from '@radix-ui/react-alert-dialog';
 
 type DialogState = {
     type: 'alert' | 'confirm' | 'prompt';
@@ -111,12 +110,12 @@ export function JSDialogs({ dialog, onResolve }: JSDialogsProps) {
                     </div>
                 )}
                 <AlertDialogFooter>
-                    {dialog.type !== 'alert' && <AlertDialogCancel onClick={handleCancel}>Cancel</AlertDialogCancel>}
-                    <AlertDialogAction asChild>
-                      <Button onClick={handleConfirm}>OK</Button>
-                    </AlertDialogAction>
+                    {dialog.type !== 'alert' && <AlertDialogCancel asChild><Button variant="outline" onClick={handleCancel}>Cancel</Button></AlertDialogCancel>}
+                    <Button onClick={handleConfirm}>OK</Button>
                 </AlertDialogFooter>
             </AlertDialogContent>
         </AlertDialog>
     );
 }
+
+    
