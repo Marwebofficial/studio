@@ -1,7 +1,7 @@
 
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -31,15 +31,20 @@ export function CodeEditorView() {
             code: `// Try using alert(), confirm(), or prompt()!
 console.log('Hello from the editor!');
 
-const name = prompt('What is your name?');
-if (name) {
-    const saidYes = confirm('Do you want to continue?');
-    if (saidYes) {
-        alert('Welcome, ' + name + '!');
-    } else {
-        console.warn('User cancelled.');
+async function run() {
+    const name = await prompt('What is your name?');
+    if (name) {
+        const saidYes = await confirm('Do you want to continue, ' + name + '?');
+        if (saidYes) {
+            alert('Welcome, ' + name + '!');
+        } else {
+            console.warn('User cancelled.');
+        }
     }
-}`,
+}
+
+run();
+`,
         },
     });
 
@@ -49,44 +54,30 @@ if (name) {
         const capturedLogs: LogEntry[] = [];
         const originalConsole = { ...console };
         
-        // --- Override console ---
-        console.log = (...args) => { capturedLogs.push({ type: 'log', message: args.map(arg => JSON.stringify(arg, null, 2)).join(' ') }); originalConsole.log(...args); };
-        console.error = (...args) => { capturedLogs.push({ type: 'error', message: args.map(arg => JSON.stringify(arg, null, 2)).join(' ') }); originalConsole.error(...args); };
-        console.warn = (...args) => { capturedLogs.push({ type: 'warn', message: args.map(arg => JSON.stringify(arg, null, 2)).join(' ') }); originalConsole.warn(...args); };
-        console.info = (...args) => { capturedLogs_push({ type: 'info', message: args.map(arg => JSON.stringify(arg, null, 2)).join(' ') }); originalConsole.info(...args); };
+        console.log = (...args) => { capturedLogs.push({ type: 'log', message: args.map(arg => typeof arg === 'string' ? arg : JSON.stringify(arg, null, 2)).join(' ') }); originalConsole.log(...args); };
+        console.error = (...args) => { capturedLogs.push({ type: 'error', message: args.map(arg => arg instanceof Error ? arg.message : JSON.stringify(arg, null, 2)).join(' ') }); originalConsole.error(...args); };
+        console.warn = (...args) => { capturedLogs.push({ type: 'warn', message: args.map(arg => typeof arg === 'string' ? arg : JSON.stringify(arg, null, 2)).join(' ') }); originalConsole.warn(...args); };
+        console.info = (...args) => { capturedLogs.push({ type: 'info', message: args.map(arg => typeof arg === 'string' ? arg : JSON.stringify(arg, null, 2)).join(' ') }); originalConsole.info(...args); };
 
-        // --- Override window functions ---
-        const originalAlert = window.alert;
-        const originalConfirm = window.confirm;
-        const originalPrompt = window.prompt;
-        
-        window.alert = (message: string) => {
-            requestDialog({ type: 'alert', message });
+        const alert = async (message: string) => {
+            await requestDialog({ type: 'alert', message });
         };
-        window.confirm = (message: string) => {
-            requestDialog({ type: 'confirm', message });
-            // This will be resolved by the dialog itself
-            return false; // Placeholder
+        const confirm = async (message: string) => {
+            return await requestDialog({ type: 'confirm', message });
         };
-        window.prompt = (message: string, defaultValue?: string) => {
-            requestDialog({ type: 'prompt', message, defaultValue });
-             // This will be resolved by the dialog itself
-            return null; // Placeholder
+        const prompt = async (message: string, defaultValue?: string) => {
+            return await requestDialog({ type: 'prompt', message, defaultValue });
         };
 
         try {
-            // Use Function constructor for safer execution
-            const execute = new Function('__requestDialog', data.code);
-            await execute(requestDialog);
+            // Create an async function that has access to our custom dialog functions
+            const AsyncFunction = Object.getPrototypeOf(async function(){}).constructor;
+            const execute = new AsyncFunction('alert', 'confirm', 'prompt', data.code);
+            await execute(alert, confirm, prompt);
         } catch (error: any) {
-            capturedLogs.push({ type: 'error', message: error.message });
+            console.error(error);
         } finally {
-            // --- Restore original functions ---
-            window.alert = originalAlert;
-            window.confirm = originalConfirm;
-            window.prompt = originalPrompt;
             Object.assign(console, originalConsole);
-
             setLogs(capturedLogs);
         }
     };
@@ -104,10 +95,11 @@ if (name) {
                                 <FormLabel>Code Editor</FormLabel>
                                 <FormControl>
                                     <Textarea
-                                        placeholder="Enter your JavaScript code here..."
+                                        placeholder="Enter your JavaScript code here. Use await for prompt() and confirm()."
                                         className="flex-1 font-mono bg-input border-input focus-visible:ring-primary/50 resize-none"
                                         {...field}
                                     />
+
                                 </FormControl>
                                 <FormMessage />
                             </FormItem>

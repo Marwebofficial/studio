@@ -13,6 +13,7 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { Input } from '@/components/ui/input';
+import { Button } from '../ui/button';
 
 type DialogState = {
     type: 'alert' | 'confirm' | 'prompt';
@@ -25,7 +26,7 @@ export const useDialogs = () => {
     const [dialog, setDialog] = useState<DialogState>(null);
     const resolver = useRef<((value: any) => void) | null>(null);
 
-    const requestDialog = (state: Omit<NonNullable<DialogState>, 'resolve'>) => {
+    const requestDialog = (state: Omit<NonNullable<DialogState>, 'resolve'>): Promise<any> => {
         return new Promise((resolve) => {
             setDialog(state);
             resolver.current = resolve;
@@ -50,10 +51,14 @@ interface JSDialogsProps {
 
 export function JSDialogs({ dialog, onResolve }: JSDialogsProps) {
     const [promptValue, setPromptValue] = useState('');
+    const inputRef = useRef<HTMLInputElement>(null);
 
     useEffect(() => {
         if (dialog?.type === 'prompt') {
             setPromptValue(dialog.defaultValue || '');
+            setTimeout(() => {
+                inputRef.current?.focus();
+            }, 100);
         }
     }, [dialog]);
 
@@ -85,23 +90,31 @@ export function JSDialogs({ dialog, onResolve }: JSDialogsProps) {
         <AlertDialog open={isOpen} onOpenChange={(open) => !open && handleCancel()}>
             <AlertDialogContent className="bg-background/80 backdrop-blur-lg border-primary/20">
                 <AlertDialogHeader>
-                    <AlertDialogTitle className="font-heading capitalize">{dialog.type}</AlertDialogTitle>
-                    <AlertDialogDescription>
+                    <AlertDialogTitle className="font-heading capitalize">JavaScript {dialog.type}</AlertDialogTitle>
+                    <AlertDialogDescription className="py-2 break-words">
                         {dialog.message}
                     </AlertDialogDescription>
                 </AlertDialogHeader>
                 {dialog.type === 'prompt' && (
                     <div className="py-2">
                         <Input 
+                            ref={inputRef}
                             value={promptValue}
                             onChange={(e) => setPromptValue(e.target.value)}
-                            autoFocus
+                            onKeyDown={(e) => {
+                                if (e.key === 'Enter') {
+                                    e.preventDefault();
+                                    handleConfirm();
+                                }
+                            }}
                         />
                     </div>
                 )}
                 <AlertDialogFooter>
                     {dialog.type !== 'alert' && <AlertDialogCancel onClick={handleCancel}>Cancel</AlertDialogCancel>}
-                    <AlertDialogAction onClick={handleConfirm}>OK</AlertDialogAction>
+                    <AlertDialogAction asChild>
+                      <Button onClick={handleConfirm}>OK</Button>
+                    </AlertDialogAction>
                 </AlertDialogFooter>
             </AlertDialogContent>
         </AlertDialog>
