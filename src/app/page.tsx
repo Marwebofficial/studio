@@ -323,19 +323,23 @@ export default function Home() {
 
     setIsPending(true);
     
-    const historyForAI = messagesWithUser.slice(0, -1).map(msg => {
-      // Create a clean, serializable object for the history
-      const cleanMsg: Message = {
-        id: msg.id,
-        role: msg.role,
-        content: msg.content,
-      };
-      if (msg.createdAt && typeof msg.createdAt === 'function') {
-        cleanMsg.createdAt = (msg.createdAt as Timestamp).toDate().toISOString();
-      } else if (msg.createdAt) {
-        cleanMsg.createdAt = msg.createdAt;
-      }
-      return cleanMsg;
+    const historyForAI = messagesWithUser.slice(0, -1).map((msg): Message => {
+        // Create a clean, serializable object for the history
+        const cleanMsg: Message = {
+          id: msg.id,
+          role: msg.role,
+          content: msg.content as string, // Ensure content is a string
+        };
+  
+        // Check if createdAt is a Firestore Timestamp and convert it
+        if (msg.createdAt && typeof (msg.createdAt as any).toDate === 'function') {
+          cleanMsg.createdAt = (msg.createdAt as Timestamp).toDate().toISOString();
+        } else if (msg.createdAt) {
+          // It might already be a string or Date object
+          cleanMsg.createdAt = new Date(msg.createdAt).toISOString();
+        }
+  
+        return cleanMsg;
     });
 
     abortControllerRef.current = new AbortController();
@@ -412,3 +416,5 @@ export default function Home() {
     </>
   );
 }
+
+    
