@@ -19,15 +19,15 @@ const runCodeFlow = ai.defineFlow(
     inputSchema: RunCodeInputSchema,
     outputSchema: RunCodeOutputSchema,
   },
-  async ({ code }) => {
-    const prompt = `You are an expert code interpreter and programming tutor supporting multiple languages including JavaScript, Python, C++, HTML, and CSS. Analyze the following code snippet.
+  async ({ code, language }) => {
+    const prompt = `You are an expert code interpreter and programming tutor supporting multiple languages including Python, JavaScript, C++, HTML, and CSS. Analyze the following ${language} code snippet.
 
-- For languages like JavaScript, Python, and C++, provide the simulated console output.
-- For HTML/CSS, describe the visual output that would be rendered in a browser.
+- For scripting languages like Python or JavaScript, provide the simulated console output.
+- For markup languages like HTML/CSS, describe the visual output that would be rendered in a browser.
 - After providing the output, give a clear, step-by-step explanation of the code's functionality, syntax, and key concepts.
 
 Code to analyze:
-\`\`\`
+\`\`\`${language}
 ${code}
 \`\`\`
 
@@ -39,7 +39,7 @@ Return the result in the specified JSON format. The explanation should be format
         output: {
             schema: RunCodeOutputSchema,
         },
-        system: 'You are an expert code interpreter and programming tutor. You analyze code and provide its output and a detailed explanation.',
+        system: `You are an expert code interpreter and programming tutor. You analyze code and provide its output and a detailed explanation in markdown format.`,
     });
 
     if (!output) {

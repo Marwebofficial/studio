@@ -27,4 +27,15 @@ export type QuizQuestion = {
     answer: number;
     explanation: string;
 };
-    
+
+export const RunCodeInputSchema = z.object({
+    code: z.string().describe('The code snippet to analyze.'),
+    language: z.string().describe('The programming language of the code.'),
+});
+export type RunCodeInput = z.infer<typeof RunCodeInputSchema>;
+
+export const RunCodeOutputSchema = z.object({
+    output: z.string().describe('The simulated output of the code.'),
+    explanation: z.string().describe('A markdown-formatted explanation of the code.'),
+});
+export type RunCodeOutput = z.infer<typeof RunCodeOutputSchema>;
