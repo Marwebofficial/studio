@@ -15,6 +15,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { QuizView } from '@/components/quiz';
 import { speak } from '@/app/actions';
 import type { Message } from '@/lib/types';
+import { CodeBlock } from './CodeBlock';
 
 
 export const UserMessage = ({ content, fileDataUri, createdAt, profilePic }: { content: string, fileDataUri?: string, createdAt: any, profilePic: string | null }) => {
@@ -115,7 +116,17 @@ export const AssistantMessage = ({ message }: { message: Message }) => {
     if (message.quiz) {
       renderContent = <QuizView quiz={message.quiz} />;
     } else if (isStringContent) {
-      renderContent = <ReactMarkdown remarkPlugins={[[remarkMath, {singleDollarTextMath: true}]]} rehypePlugins={[rehypeKatex]}>{content}</ReactMarkdown>;
+      renderContent = (
+        <ReactMarkdown
+            remarkPlugins={[[remarkMath, {singleDollarTextMath: true}]]}
+            rehypePlugins={[rehypeKatex]}
+            components={{
+                pre: ({node, ...props}) => <CodeBlock {...props} />,
+            }}
+        >
+            {content}
+        </ReactMarkdown>
+      );
     } else {
       renderContent = message.content;
     }

@@ -19,6 +19,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { runCode } from '@/app/actions';
 import { Skeleton } from '../ui/skeleton';
 import type { RunCodeOutput } from '@/lib/types';
+import { CodeBlock } from './CodeBlock';
 
 
 const jsFormSchema = z.object({
@@ -240,14 +241,24 @@ fibonacci(10)
                                 <>
                                     <div>
                                         <h3 className="font-semibold font-heading mb-2">Simulated Output</h3>
-                                        <pre className="bg-background/80 p-3 rounded-md border border-input text-sm">
-                                            <code>{aiOutput.output}</code>
-                                        </pre>
+                                        <CodeBlock>
+                                            <pre className="bg-background/80 p-3 rounded-md border border-input text-sm">
+                                                <code>{aiOutput.output}</code>
+                                            </pre>
+                                        </CodeBlock>
                                     </div>
                                     <div>
                                         <h3 className="font-semibold font-heading mb-2">Explanation</h3>
                                         <div className="prose prose-sm prose-invert max-w-none text-foreground">
-                                            <ReactMarkdown remarkPlugins={[[remarkMath, {singleDollarTextMath: true}]]} rehypePlugins={[rehypeKatex]}>{aiOutput.explanation}</ReactMarkdown>
+                                            <ReactMarkdown 
+                                                remarkPlugins={[[remarkMath, {singleDollarTextMath: true}]]}
+                                                rehypePlugins={[rehypeKatex]}
+                                                components={{
+                                                    pre: ({node, ...props}) => <CodeBlock {...props} />,
+                                                }}
+                                            >
+                                                {aiOutput.explanation}
+                                            </ReactMarkdown>
                                         </div>
                                     </div>
                                 </>
@@ -320,7 +331,7 @@ fibonacci(10)
                             />
                             <Button type="submit" className="w-full md:w-auto md:self-end">
                                 <Play className="mr-2" />Run Code
-                            </Button>
+                            </Button>                        
                         </form>
                     </Form>
                 </TabsContent>
@@ -371,3 +382,4 @@ fibonacci(10)
         </div>
     );
 }
+
