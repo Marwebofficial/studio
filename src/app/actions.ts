@@ -17,10 +17,7 @@ import {
     generateQuiz,
     type GenerateQuizOutput,
 } from '@/ai/flows/generate-quiz';
-import {
-    runCode,
-} from '@/ai/flows/run-code';
-import type { Message, RunCodeInput, RunCodeOutput } from '@/lib/types';
+import type { Message } from '@/lib/types';
 
 
 export async function getAnswer(
@@ -87,20 +84,6 @@ export async function getQuiz(
         console.error(e);
         return {
             error: e.message || 'An error occurred during quiz generation.',
-        };
-    }
-}
-
-export async function executeCode(
-    code: string
-): Promise<{ result?: RunCodeOutput; error?: string }> {
-    try {
-        const result = await runCode({ code });
-        return { result };
-    } catch (e: any) {
-        console.error(e);
-        return {
-            error: e.message || 'An error occurred during code execution.',
         };
     }
 }

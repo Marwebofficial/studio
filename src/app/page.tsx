@@ -12,7 +12,7 @@ import { useToast } from '@/hooks/use-toast';
 import { useAuth, useUser, useFirestore, useCollection, useMemoFirebase, useDoc } from '@/firebase';
 import { signOut } from 'firebase/auth';
 import type { Message, Chat, RunCodeOutput } from '@/lib/types';
-import { getAnswer, executeCode, getImage, getQuiz } from '@/app/actions';
+import { getAnswer, getImage, getQuiz } from '@/app/actions';
 
 import { SidebarProvider } from '@/components/ui/sidebar';
 import { ChatSidebar } from '@/components/chat/ChatSidebar';
@@ -167,11 +167,7 @@ export default function Home() {
         const reader = new FileReader();
         reader.onload = (loadEvent) => {
             const newProfilePic = loadEvent.target?.result as string;
-            setProfilePic(newProfilePic);
-            toast({
-                title: 'Profile Picture Updated',
-                description: 'Your new photo is set for this session only and will not be saved.',
-            });
+            setProfilePic(newProfilePic); // Set for session preview
         };
         reader.readAsDataURL(file);
     }
@@ -189,8 +185,10 @@ export default function Home() {
   const onUpdateProfileSubmit = async (values: z.infer<typeof updateProfileFormSchema>) => {
     if (!user) return;
     try {
+        // Update auth profile
         await updateProfile(user, { displayName: values.displayName });
         
+        // Update firestore document
         const userDocRef = doc(firestore, 'users', user.uid);
         await updateDoc(userDocRef, { displayName: values.displayName });
 
@@ -332,7 +330,7 @@ export default function Home() {
         role: msg.role,
         content: msg.content,
       };
-      if (msg.createdAt && typeof msg.createdAt.toDate === 'function') {
+      if (msg.createdAt && typeof msg.createdAt === 'function') {
         cleanMsg.createdAt = (msg.createdAt as Timestamp).toDate().toISOString();
       } else if (msg.createdAt) {
         cleanMsg.createdAt = msg.createdAt;
@@ -351,19 +349,6 @@ export default function Home() {
     }
     
     setIsPending(false);
-  };
-
-  const handleCodeSubmit = async (code: string): Promise<RunCodeOutput | null> => {
-    const { result, error } = await executeCode(code);
-    if (error) {
-        toast({
-            variant: 'destructive',
-            title: 'Error Executing Code',
-            description: error,
-        });
-        return null;
-    }
-    return result || null;
   };
   
   const activeChatTitle = chats?.find(c => c.id === activeChatId)?.title || 'New Conversation';
@@ -418,7 +403,7 @@ export default function Home() {
                             onNewMessage={handleChatSubmit}
                         />
                     ) : (
-                        <CodeEditorView onCodeSubmit={handleCodeSubmit} />
+                        <CodeEditorView />
                     )}
                 </main>
             </div>
